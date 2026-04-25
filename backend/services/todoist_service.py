@@ -1,0 +1,56 @@
+import os
+from typing import List, Optional
+from todoist_api_python.api import TodoistAPI
+from todoist_api_python.models import Task
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class TodoistService:
+    def __init__(self):
+        token = os.getenv("TODOIST_API_TOKEN")
+        if not token or token == "your_todoist_token_here":
+            self.api = None
+            print("WARNING: TODOIST_API_TOKEN is not set.")
+        else:
+            self.api = TodoistAPI(token)
+
+    async def get_active_tasks(self) -> List[Task]:
+        """Fetch all active tasks from Todoist."""
+        if not self.api:
+            return []
+        try:
+            tasks = await self.api.get_tasks()
+            return tasks
+        except Exception as error:
+            print(f"Error fetching tasks from Todoist: {error}")
+            return []
+
+    async def create_task(self, content: str, due_string: Optional[str] = None, priority: int = 1) -> Optional[Task]:
+        """Create a new task in Todoist."""
+        if not self.api:
+            return None
+        try:
+            task = await self.api.add_task(
+                content=content,
+                due_string=due_string,
+                priority=priority,
+            )
+            return task
+        except Exception as error:
+            print(f"Error creating task in Todoist: {error}")
+            return None
+
+    async def close_task(self, task_id: str) -> bool:
+        """Close a task by ID."""
+        if not self.api:
+            return False
+        try:
+            is_success = await self.api.close_task(task_id=task_id)
+            return is_success
+        except Exception as error:
+            print(f"Error closing task in Todoist: {error}")
+            return False
+
+# Create a singleton instance
+todoist_service = TodoistService()
