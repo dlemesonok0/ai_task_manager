@@ -1,122 +1,107 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useEffect } from 'react';
+import './index.css';
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+interface Task {
+  id: string;
+  content: string;
+  priority: number;
+  due: string | null;
 }
 
-export default App
+interface Event {
+  id: string;
+  summary: string;
+  start: { dateTime?: string; date?: string };
+  end: { dateTime?: string; date?: string };
+}
+
+function App() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tasksRes, eventsRes] = await Promise.all([
+          fetch('http://localhost:8000/api/tasks'),
+          fetch('http://localhost:8000/api/events')
+        ]);
+        
+        if (tasksRes.ok) setTasks(await tasksRes.json());
+        if (eventsRes.ok) setEvents(await eventsRes.json());
+      } catch (err) {
+        console.error("Failed to fetch data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const formatTime = (isoString?: string) => {
+    if (!isoString) return 'All Day';
+    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div>
+      <h1>✨ AI Task Manager</h1>
+      
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
+          <div style={{ animation: 'spin 1s linear infinite', fontSize: '2rem' }}>⏳</div>
+          <p style={{ marginTop: '1rem', color: '#9ca3af' }}>Syncing with Todoist & Google Calendar...</p>
+        </div>
+      ) : (
+        <div className="dashboard-grid">
+          {/* Todoist Tasks Panel */}
+          <section className="glass-panel">
+            <h2>🎯 Active Tasks</h2>
+            <div className="item-list">
+              {tasks.length === 0 ? (
+                <p style={{ color: '#9ca3af' }}>No active tasks found.</p>
+              ) : (
+                tasks.map(task => (
+                  <div key={task.id} className={`item-card priority-${task.priority}`}>
+                    <div className="item-title">{task.content}</div>
+                    <div className="item-meta">
+                      <span>Priority: P{5 - task.priority}</span>
+                      {task.due && <span>Due: {task.due}</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* Google Calendar Panel */}
+          <section className="glass-panel">
+            <h2>📅 Upcoming Events</h2>
+            <div className="item-list">
+              {events.length === 0 ? (
+                <p style={{ color: '#9ca3af' }}>No upcoming events found.</p>
+              ) : (
+                events.map(event => (
+                  <div key={event.id} className="item-card event">
+                    <div className="item-title">{event.summary || '(No title)'}</div>
+                    <div className="item-meta">
+                      <span>{formatTime(event.start?.dateTime || event.start?.date)} - {formatTime(event.end?.dateTime || event.end?.date)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+      
+      <style>{`
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+      `}</style>
+    </div>
+  );
+}
+
+export default App;
