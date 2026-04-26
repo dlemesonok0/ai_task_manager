@@ -5,9 +5,9 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from dotenv import load_dotenv
 
-from .services.ai_service import ai_service
-from .services.todoist_service import todoist_service
-from .services.scheduler import scheduler_service
+from services.ai_service import ai_service
+from services.todoist_service import todoist_service
+from services.scheduler import scheduler_service
 
 load_dotenv()
 

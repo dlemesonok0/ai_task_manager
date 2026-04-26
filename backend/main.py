@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from .services.todoist_service import todoist_service
-from .services.gcal_service import gcal_service
+from services.todoist_service import todoist_service
+from services.gcal_service import gcal_service
 
 app = FastAPI(
     title="AI Task Manager API",
@@ -12,6 +12,11 @@ app = FastAPI(
 )
 
 # Pydantic models for documentation
+class TaskCreate(BaseModel):
+    content: str
+    priority: Optional[int] = 1
+    due_string: Optional[str] = "today"
+
 class TaskResponse(BaseModel):
     id: str
     content: str
@@ -38,6 +43,19 @@ async def get_tasks():
     """Fetch all active tasks from Todoist."""
     tasks = await todoist_service.get_active_tasks()
     return [{"id": t.id, "content": t.content, "priority": t.priority, "due": getattr(t.due, 'string', None) if getattr(t, 'due', None) else None} for t in tasks]
+
+@app.post("/api/tasks", response_model=TaskResponse, tags=["Tasks"])
+async def create_task(task_data: TaskCreate):
+    """Create a new task in Todoist."""
+    task = await todoist_service.create_task(
+        content=task_data.content,
+        priority=task_data.priority,
+        due_string=task_data.due_string
+    )
+    if not task:
+        return {"error": "Failed to create task"}
+    return {"id": task.id, "content": task.content, "priority": task.priority, "due": getattr(task.due, 'string', None) if getattr(task, 'due', None) else None}
+
 
 @app.get("/api/events", response_model=List[dict], tags=["Calendar"])
 def get_events():

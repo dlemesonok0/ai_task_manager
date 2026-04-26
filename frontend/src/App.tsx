@@ -22,25 +22,51 @@ function App() {
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [tasksRes, eventsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/tasks`),
-          fetch(`${API_BASE_URL}/api/events`)
-        ]);
-        
-        if (tasksRes.ok) setTasks(await tasksRes.json());
-        if (eventsRes.ok) setEvents(await eventsRes.json());
-      } catch (err) {
-        console.error("Failed to fetch data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const [newTask, setNewTask] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
+  const fetchData = async () => {
+    try {
+      const [tasksRes, eventsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/tasks`),
+        fetch(`${API_BASE_URL}/api/events`)
+      ]);
+      
+      if (tasksRes.ok) setTasks(await tasksRes.json());
+      if (eventsRes.ok) setEvents(await eventsRes.json());
+    } catch (err) {
+      console.error("Failed to fetch data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, []);
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTask.trim()) return;
+    
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newTask, priority: 1, due_string: 'today' })
+      });
+      
+      if (res.ok) {
+        setNewTask('');
+        await fetchData(); // Refresh list
+      }
+    } catch (err) {
+      console.error("Error adding task:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const formatTime = (isoString?: string) => {
     if (!isoString) return 'All Day';
@@ -50,6 +76,23 @@ function App() {
   return (
     <div>
       <h1>✨ AI Task Manager</h1>
+      
+      <form onSubmit={handleAddTask} className="glass-panel" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
+        <input 
+          type="text" 
+          value={newTask}
+          onChange={(e) => setNewTask(e.target.value)}
+          placeholder="What needs to be done today?" 
+          style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.8rem', color: 'white' }}
+        />
+        <button 
+          type="submit" 
+          disabled={submitting}
+          style={{ background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', border: 'none', borderRadius: '8px', padding: '0.8rem 1.5rem', color: 'white', fontWeight: 'bold', cursor: 'pointer', transition: 'transform 0.2s' }}
+        >
+          {submitting ? 'Adding...' : 'Add Task'}
+        </button>
+      </form>
       
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>

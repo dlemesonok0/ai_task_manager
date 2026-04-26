@@ -15,9 +15,14 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 class GoogleCalendarService:
     def __init__(self):
         self.creds = None
-        self.service = None
+        self._service = None
         self.credentials_file = os.getenv("GOOGLE_CALENDAR_CREDENTIALS_FILE", "credentials.json")
-        self._authenticate()
+
+    @property
+    def service(self):
+        if self._service is None:
+            self._authenticate()
+        return self._service
 
     def _authenticate(self):
         """Authenticate with Google Calendar API using OAuth2."""
@@ -37,9 +42,13 @@ class GoogleCalendarService:
                     print(f"Error refreshing Google Calendar token: {e}")
                     self.creds = None
             elif os.path.exists(creds_path):
-                flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-                # This will open a browser window for authentication if running locally
-                self.creds = flow.run_local_server(port=0)
+                try:
+                    flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+                    # This will open a browser window for authentication if running locally
+                    self.creds = flow.run_local_server(port=0)
+                except Exception as e:
+                    print(f"Error initializing Google Calendar OAuth flow: {e}")
+                    self.creds = None
             else:
                 print(f"WARNING: Google Calendar credentials file '{self.credentials_file}' not found. Calendar sync is disabled.")
                 return
@@ -50,7 +59,11 @@ class GoogleCalendarService:
                     token.write(self.creds.to_json())
 
         if self.creds:
-            self.service = build('calendar', 'v3', credentials=self.creds)
+            try:
+                self._service = build('calendar', 'v3', credentials=self.creds)
+            except Exception as e:
+                print(f"Error building Google Calendar service: {e}")
+                self._service = None
 
     def get_upcoming_events(self, max_results: int = 10) -> List[Dict[str, Any]]:
         """Fetch upcoming events from the primary calendar."""
