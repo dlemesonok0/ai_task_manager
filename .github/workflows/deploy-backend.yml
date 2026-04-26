@@ -32,4 +32,4 @@ jobs:
             git pull origin main
             
             # Restart containers with the latest code
-            docker-compose up -d --build
+            docker compose up -d --build
