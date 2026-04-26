@@ -6,6 +6,7 @@ on:
       - master
     paths:
       - 'backend/**'
+      - 'frontend/**'
       - 'docker-compose.yml'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
