@@ -4,8 +4,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-# We build with the VITE_API_URL pointing to the same host's /api prefix
-ENV VITE_API_URL=/api
+# Build the app without a base URL prefix
+
 RUN npm run build
 
 # Stage 2: Serve

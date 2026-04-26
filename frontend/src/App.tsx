@@ -20,7 +20,7 @@ function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
   const [newTask, setNewTask] = useState('');
   const [submitting, setSubmitting] = useState(false);
