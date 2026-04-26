@@ -19,7 +19,27 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
     """This handler receives messages with `/start` command"""
-    await message.answer(f"Hello, {message.from_user.full_name}! I am your AI Task Manager. Send me any task you want to remember!")
+    await message.answer(
+        f"👋 Привет, {message.from_user.full_name}!\n\n"
+        "Я твой персональный AI Task Manager. Я помогу тебе управлять задачами и календарем.\n\n"
+        "Просто напиши мне любую задачу, например: *'Купить молоко завтра в 9 утра'*.\n\n"
+        "Доступные команды:\n"
+        "/briefing — сводка задач на сегодня\n"
+        "/autoschedule — умное планирование дня в календаре\n"
+        "/help — помощь по использованию"
+    )
+
+@dp.message(Command("help"))
+async def command_help_handler(message: Message) -> None:
+    """Provides help instructions"""
+    help_text = (
+        "📖 **Как мной пользоваться:**\n\n"
+        "1. **Создание задач**: Просто пиши текст. Я пойму время и приоритет.\n"
+        "2. **Сводка**: Команда /briefing покажет топ-10 твоих активных задач.\n"
+        "3. **Умное планирование**: Команда /autoschedule проанализирует твои задачи и свободное время в Google Календаре, после чего предложит оптимальное расписание и само создаст события.\n\n"
+        "Я использую ИИ для понимания твоих намерений, так что можешь общаться со мной на обычном языке!"
+    )
+    await message.answer(help_text, parse_mode="Markdown")
 
 @dp.message(Command("briefing"))
 async def command_briefing_handler(message: Message) -> None:

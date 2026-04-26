@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
 from .services.todoist_service import todoist_service
 from .services.gcal_service import gcal_service
 
@@ -8,6 +10,19 @@ app = FastAPI(
     description="Backend for the AI Task Manager with Todoist, Google Calendar, and Telegram integrations.",
     version="1.0.0"
 )
+
+# Pydantic models for documentation
+class TaskResponse(BaseModel):
+    id: str
+    content: str
+    priority: int
+    due: Optional[str] = None
+
+class CalendarEvent(BaseModel):
+    id: str
+    summary: Optional[str] = None
+    start: dict
+    end: dict
 
 # Allow CORS for the frontend
 app.add_middleware(
@@ -18,16 +33,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/api/tasks")
+@app.get("/api/tasks", response_model=List[TaskResponse], tags=["Tasks"])
 async def get_tasks():
+    """Fetch all active tasks from Todoist."""
     tasks = await todoist_service.get_active_tasks()
     return [{"id": t.id, "content": t.content, "priority": t.priority, "due": getattr(t.due, 'string', None) if getattr(t, 'due', None) else None} for t in tasks]
 
-@app.get("/api/events")
+@app.get("/api/events", response_model=List[dict], tags=["Calendar"])
 def get_events():
+    """Fetch upcoming events from Google Calendar."""
     events = gcal_service.get_upcoming_events(max_results=20)
     return events
 
-@app.get("/")
+@app.get("/", tags=["Health"])
 def read_root():
     return {"status": "ok", "message": "AI Task Manager API is running"}
