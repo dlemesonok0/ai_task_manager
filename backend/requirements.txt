@@ -9,3 +9,7 @@ google-auth-oauthlib
 todoist-api-python
 aiogram
 openai
+pytest
+pytest-asyncio
+pytest-mock
+httpx
