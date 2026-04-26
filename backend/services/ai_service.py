@@ -32,6 +32,7 @@ class AIService:
             print(f"AI Service initialized with Local Model ({self.model})")
         else:
             self.client = None
+            self.model = "gpt-4o-mini"
             print("WARNING: No LLM configuration found. AI features will be disabled.")
 
     async def parse_task_nlp(self, text: str) -> dict:
