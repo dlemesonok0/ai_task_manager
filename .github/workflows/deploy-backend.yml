@@ -1,0 +1,35 @@
+name: Deploy Backend to VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || '22' }}
+          script: |
+            # Create project directory if it doesn't exist
+            mkdir -p ~/ai_task_manager
+            cd ~/ai_task_manager
+            
+            # Pull latest code (assumes you have cloned the repo once on the server)
+            # If not cloned, this command will fail. You must clone it first manually:
+            # git clone <your-repo-url> .
+            git pull origin main
+            
+            # Restart containers with the latest code
+            docker-compose up -d --build

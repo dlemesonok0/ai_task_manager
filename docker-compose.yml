@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai_task_manager_api
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Map credentials so they persist or are readable
+      - ./backend/credentials.json:/app/credentials.json:ro
+      - ./backend/token.json:/app/token.json
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai_task_manager_bot
+    restart: always
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/credentials.json:/app/credentials.json:ro
+      - ./backend/token.json:/app/token.json
+    command: python bot.py
