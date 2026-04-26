@@ -20,12 +20,14 @@ function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [tasksRes, eventsRes] = await Promise.all([
-          fetch('http://localhost:8000/api/tasks'),
-          fetch('http://localhost:8000/api/events')
+          fetch(`${API_BASE_URL}/api/tasks`),
+          fetch(`${API_BASE_URL}/api/events`)
         ]);
         
         if (tasksRes.ok) setTasks(await tasksRes.json());
