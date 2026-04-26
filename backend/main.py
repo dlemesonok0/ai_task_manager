@@ -53,7 +53,8 @@ async def create_task(task_data: TaskCreate):
         due_string=task_data.due_string
     )
     if not task:
-        return {"error": "Failed to create task"}
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Failed to create task")
     return {"id": task.id, "content": task.content, "priority": task.priority, "due": getattr(task.due, 'string', None) if getattr(task, 'due', None) else None}
 
 

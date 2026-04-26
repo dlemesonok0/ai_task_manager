@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional
-from todoist_api_python.api import TodoistAPI
+from todoist_api_python.api_async import TodoistAPIAsync
 from todoist_api_python.models import Task
 from dotenv import load_dotenv
 
@@ -13,14 +13,20 @@ class TodoistService:
             self.api = None
             print("WARNING: TODOIST_API_TOKEN is not set.")
         else:
-            self.api = TodoistAPI(token)
+            self.api = TodoistAPIAsync(token)
 
     async def get_active_tasks(self) -> List[Task]:
         """Fetch all active tasks from Todoist."""
         if not self.api:
             return []
         try:
-            tasks = await self.api.get_tasks()
+            paginator = await self.api.get_tasks()
+            if isinstance(paginator, list):
+                return paginator
+            # AsyncResultsPaginator yields pages (lists of tasks)
+            tasks = []
+            async for page in paginator:
+                tasks.extend(page)
             return tasks
         except Exception as error:
             print(f"Error fetching tasks from Todoist: {error}")

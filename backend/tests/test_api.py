@@ -51,3 +51,33 @@ async def test_get_events(client):
         data = response.json()
         assert len(data) == 1
         assert data[0]["summary"] == "Meeting"
+
+@pytest.mark.asyncio
+async def test_create_task(client):
+    class MockTask:
+        def __init__(self, id, content, priority, due=None):
+            self.id = id
+            self.content = content
+            self.priority = priority
+            self.due = due
+
+    mock_task = MockTask("123", "New Task", 2)
+
+    with patch("services.todoist_service.todoist_service.create_task", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_task
+        response = await client.post("/api/tasks", json={"content": "New Task", "priority": 2})
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "New Task"
+        assert data["id"] == "123"
+
+@pytest.mark.asyncio
+async def test_create_task_fail(client):
+    with patch("services.todoist_service.todoist_service.create_task", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = None
+        response = await client.post("/api/tasks", json={"content": "Fail Task"})
+        
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Failed to create task"
+

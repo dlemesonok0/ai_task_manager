@@ -1,4 +1,4 @@
-name: Deploy Backend to VPS
+name: Test and Deploy Backend
 
 on:
   push:
@@ -6,14 +6,40 @@ on:
       - master
     paths:
       - 'backend/**'
-      - 'frontend/**'
-      - 'docker-compose.yml'
       - '.github/workflows/deploy-backend.yml'
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest --cov=. --cov-report=term-missing
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
@@ -23,13 +49,8 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || '22' }}
           script: |
-            # Create project directory if it doesn't exist
             mkdir -p ~/ai_task_manager
             cd ~/ai_task_manager
-            
-            # Ensure we have the latest code, overwriting any local changes
             git fetch origin master
             git reset --hard origin/master
-            
-            # Restart containers with the latest code
             docker compose up -d --build --force-recreate
