@@ -3,7 +3,7 @@ name: Deploy Backend to VPS
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'backend/**'
       - 'docker-compose.yml'
