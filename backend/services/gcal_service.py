@@ -30,7 +30,11 @@ class GoogleCalendarService:
         creds_path = os.path.join(os.path.dirname(__file__), '..', self.credentials_file)
 
         if os.path.exists(token_path):
-            self.creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+            try:
+                self.creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+            except Exception as e:
+                print(f"Error loading token.json: {e}. Token may be empty or invalid.")
+                self.creds = None
         
         # If there are no (valid) credentials available, let the user log in.
         # We handle the case where credentials.json might not exist yet to avoid crashing the server.
