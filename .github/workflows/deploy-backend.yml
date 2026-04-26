@@ -27,10 +27,9 @@ jobs:
             mkdir -p ~/ai_task_manager
             cd ~/ai_task_manager
             
-            # Pull latest code (assumes you have cloned the repo once on the server)
-            # If not cloned, this command will fail. You must clone it first manually:
-            # git clone <your-repo-url> .
-            git pull origin main
+            # Ensure we have the latest code, overwriting any local changes
+            git fetch origin master
+            git reset --hard origin/master
             
             # Restart containers with the latest code
-            docker compose up -d --build
+            docker compose up -d --build --force-recreate
