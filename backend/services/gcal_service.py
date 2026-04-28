@@ -69,19 +69,40 @@ class GoogleCalendarService:
                 print(f"Error building Google Calendar service: {e}")
                 self._service = None
 
+    def _get_event_start_value(self, event: Dict[str, Any]) -> str:
+        start = event.get('start', {})
+        return start.get('dateTime') or start.get('date') or ''
+
+    def _get_calendar_ids(self) -> List[str]:
+        calendars_result = self.service.calendarList().list().execute()
+        calendars = calendars_result.get('items', [])
+        calendar_ids = [
+            calendar['id']
+            for calendar in calendars
+            if calendar.get('id') and not calendar.get('deleted')
+        ]
+        return calendar_ids or ['primary']
+
     def get_upcoming_events(self, max_results: int = 10) -> List[Dict[str, Any]]:
-        """Fetch upcoming events from the primary calendar."""
+        """Fetch upcoming events from all calendars available to the account."""
         if not self.service:
             return []
         
         try:
-            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
-            events_result = self.service.events().list(
-                calendarId='primary', timeMin=now,
-                maxResults=max_results, singleEvents=True,
-                orderBy='startTime').execute()
-            events = events_result.get('items', [])
-            return events
+            now = datetime.datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z')
+            events = []
+
+            for calendar_id in self._get_calendar_ids():
+                events_result = self.service.events().list(
+                    calendarId=calendar_id, timeMin=now,
+                    maxResults=max_results, singleEvents=True,
+                    orderBy='startTime').execute()
+                for event in events_result.get('items', []):
+                    event['calendarId'] = calendar_id
+                    events.append(event)
+
+            events.sort(key=self._get_event_start_value)
+            return events[:max_results]
         except Exception as e:
             print(f"Error fetching Google Calendar events: {e}")
             return []

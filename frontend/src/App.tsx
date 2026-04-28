@@ -13,11 +13,17 @@ interface Event {
   summary: string;
   start: { dateTime?: string; date?: string };
   end: { dateTime?: string; date?: string };
+  calendarId?: string;
 }
 
 interface TaskGroup {
   title: string;
   tasks: Task[];
+}
+
+interface CalendarDay {
+  date: Date;
+  events: Event[];
 }
 
 const taskGroupOrder = ['today', 'tomorrow', 'upcoming', 'no-date'] as const;
@@ -37,6 +43,13 @@ const taskGroupLabels: Record<(typeof taskGroupOrder)[number], string> = {
   tomorrow: 'Tomorrow',
   upcoming: 'Upcoming',
   'no-date': 'No due date'
+};
+
+const dateKey = (date: Date) => date.toISOString().slice(0, 10);
+
+const getEventStartDate = (event: Event) => {
+  const startValue = event.start?.dateTime || event.start?.date;
+  return startValue ? new Date(startValue) : null;
 };
 
 function App() {
@@ -97,12 +110,30 @@ function App() {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatDayName = (date: Date) => date.toLocaleDateString([], { weekday: 'short' });
+
+  const formatDayNumber = (date: Date) => date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+
   const groupedTasks: TaskGroup[] = taskGroupOrder
     .map((groupKey) => ({
       title: taskGroupLabels[groupKey],
       tasks: tasks.filter((task) => getTaskGroupKey(task.due) === groupKey)
     }))
     .filter((group) => group.tasks.length > 0);
+
+  const calendarDays: CalendarDay[] = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + index);
+
+    return {
+      date,
+      events: events.filter((event) => {
+        const eventDate = getEventStartDate(event);
+        return eventDate ? dateKey(eventDate) === dateKey(date) : false;
+      })
+    };
+  });
 
   return (
     <div>
@@ -165,15 +196,27 @@ function App() {
           {/* Google Calendar Panel */}
           <section className="glass-panel">
             <h2>📅 Upcoming Events</h2>
-            <div className="item-list">
+            <div className="calendar-grid">
               {events.length === 0 ? (
                 <p style={{ color: '#9ca3af' }}>No upcoming events found.</p>
               ) : (
-                events.map(event => (
-                  <div key={event.id} className="item-card event">
-                    <div className="item-title">{event.summary || '(No title)'}</div>
-                    <div className="item-meta">
-                      <span>{formatTime(event.start?.dateTime || event.start?.date)} - {formatTime(event.end?.dateTime || event.end?.date)}</span>
+                calendarDays.map((day) => (
+                  <div key={dateKey(day.date)} className="calendar-day">
+                    <div className="calendar-day-header">
+                      <span>{formatDayName(day.date)}</span>
+                      <strong>{formatDayNumber(day.date)}</strong>
+                    </div>
+                    <div className="calendar-events">
+                      {day.events.length === 0 ? (
+                        <span className="calendar-empty">No events</span>
+                      ) : (
+                        day.events.map((event) => (
+                          <div key={event.id} className="calendar-event">
+                            <span>{formatTime(event.start?.dateTime || event.start?.date)}</span>
+                            <strong>{event.summary || '(No title)'}</strong>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 ))

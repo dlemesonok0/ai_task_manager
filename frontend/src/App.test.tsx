@@ -13,8 +13,8 @@ const mockEvents = [
   { 
     id: 'e1', 
     summary: 'Meeting', 
-    start: { dateTime: '2026-04-26T10:00:00Z' }, 
-    end: { dateTime: '2026-04-26T11:00:00Z' } 
+    start: { dateTime: new Date().toISOString() }, 
+    end: { dateTime: new Date(Date.now() + 60 * 60 * 1000).toISOString() } 
   }
 ];
 

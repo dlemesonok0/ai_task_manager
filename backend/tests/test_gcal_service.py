@@ -11,16 +11,62 @@ def gcal_service():
         return service
 
 def test_get_upcoming_events_success(gcal_service):
-    mock_events = [
-        {'summary': 'Meeting', 'start': {'dateTime': '2026-04-26T10:00:00Z'}, 'end': {'dateTime': '2026-04-26T11:00:00Z'}}
-    ]
-    gcal_service._service.events.return_value.list.return_value.execute.return_value = {'items': mock_events}
+    gcal_service._service.calendarList.return_value.list.return_value.execute.return_value = {
+        'items': [{'id': 'primary'}]
+    }
+    gcal_service._service.events.return_value.list.return_value.execute.return_value = {
+        'items': [
+            {
+                'summary': 'Meeting',
+                'start': {'dateTime': '2026-04-26T10:00:00Z'},
+                'end': {'dateTime': '2026-04-26T11:00:00Z'}
+            }
+        ]
+    }
     
     events = gcal_service.get_upcoming_events()
     assert len(events) == 1
     assert events[0]['summary'] == 'Meeting'
+    assert events[0]['calendarId'] == 'primary'
+
+def test_get_upcoming_events_from_all_calendars(gcal_service):
+    gcal_service._service.calendarList.return_value.list.return_value.execute.return_value = {
+        'items': [{'id': 'primary'}, {'id': 'work'}, {'id': 'deleted', 'deleted': True}]
+    }
+
+    def event_result(calendarId, **kwargs):
+        events_by_calendar = {
+            'primary': [
+                {
+                    'summary': 'Primary Meeting',
+                    'start': {'dateTime': '2026-04-26T12:00:00Z'},
+                    'end': {'dateTime': '2026-04-26T13:00:00Z'}
+                }
+            ],
+            'work': [
+                {
+                    'summary': 'Work Standup',
+                    'start': {'dateTime': '2026-04-26T09:00:00Z'},
+                    'end': {'dateTime': '2026-04-26T09:30:00Z'}
+                }
+            ]
+        }
+        result = MagicMock()
+        result.execute.return_value = {'items': events_by_calendar[calendarId]}
+        return result
+
+    gcal_service._service.events.return_value.list.side_effect = event_result
+
+    events = gcal_service.get_upcoming_events(max_results=10)
+
+    assert [event['summary'] for event in events] == ['Work Standup', 'Primary Meeting']
+    assert [event['calendarId'] for event in events] == ['work', 'primary']
+    assert gcal_service._service.events.return_value.list.call_count == 2
 
 def test_get_upcoming_events_error(gcal_service):
+    gcal_service._service.calendarList.return_value.list.return_value.execute.return_value = {
+        'items': [{'id': 'primary'}]
+    }
     gcal_service._service.events.return_value.list.return_value.execute.side_effect = Exception("Auth Error")
     events = gcal_service.get_upcoming_events()
     assert events == []
@@ -109,4 +155,3 @@ def test_authenticate_no_creds_file():
         service = GoogleCalendarService()
         service._authenticate()
         assert service.creds is None
-
