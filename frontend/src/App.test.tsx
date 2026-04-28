@@ -5,7 +5,8 @@ import App from './App';
 // Mock data
 const mockTasks = [
   { id: '1', content: 'Task 1', priority: 1, due: 'today' },
-  { id: '2', content: 'Task 2', priority: 4, due: 'tomorrow' }
+  { id: '2', content: 'Task 2', priority: 4, due: 'tomorrow' },
+  { id: '3', content: 'Task 3', priority: 2, due: null }
 ];
 
 const mockEvents = [
@@ -51,6 +52,10 @@ describe('App Component', () => {
 
     expect(screen.getByText('Task 1')).toBeInTheDocument();
     expect(screen.getByText('Task 2')).toBeInTheDocument();
+    expect(screen.getByText('Task 3')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Today' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tomorrow' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'No due date' })).toBeInTheDocument();
     expect(screen.getByText('Meeting')).toBeInTheDocument();
   });
 

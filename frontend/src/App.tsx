@@ -15,6 +15,30 @@ interface Event {
   end: { dateTime?: string; date?: string };
 }
 
+interface TaskGroup {
+  title: string;
+  tasks: Task[];
+}
+
+const taskGroupOrder = ['today', 'tomorrow', 'upcoming', 'no-date'] as const;
+
+const getTaskGroupKey = (due: string | null) => {
+  if (!due) return 'no-date';
+
+  const normalizedDue = due.toLowerCase();
+  if (normalizedDue.includes('today')) return 'today';
+  if (normalizedDue.includes('tomorrow')) return 'tomorrow';
+
+  return 'upcoming';
+};
+
+const taskGroupLabels: Record<(typeof taskGroupOrder)[number], string> = {
+  today: 'Today',
+  tomorrow: 'Tomorrow',
+  upcoming: 'Upcoming',
+  'no-date': 'No due date'
+};
+
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -73,6 +97,13 @@ function App() {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const groupedTasks: TaskGroup[] = taskGroupOrder
+    .map((groupKey) => ({
+      title: taskGroupLabels[groupKey],
+      tasks: tasks.filter((task) => getTaskGroupKey(task.due) === groupKey)
+    }))
+    .filter((group) => group.tasks.length > 0);
+
   return (
     <div>
       <h1>✨ AI Task Manager</h1>
@@ -108,12 +139,22 @@ function App() {
               {tasks.length === 0 ? (
                 <p style={{ color: '#9ca3af' }}>No active tasks found.</p>
               ) : (
-                tasks.map(task => (
-                  <div key={task.id} className={`item-card priority-${task.priority}`}>
-                    <div className="item-title">{task.content}</div>
-                    <div className="item-meta">
-                      <span>Priority: P{5 - task.priority}</span>
-                      {task.due && <span>Due: {task.due}</span>}
+                groupedTasks.map((group) => (
+                  <div key={group.title} className="task-group">
+                    <div className="task-group-header">
+                      <h3>{group.title}</h3>
+                      <span>{group.tasks.length}</span>
+                    </div>
+                    <div className="task-group-list">
+                      {group.tasks.map(task => (
+                        <div key={task.id} className={`item-card priority-${task.priority}`}>
+                          <div className="item-title">{task.content}</div>
+                          <div className="item-meta">
+                            <span>Priority: P{5 - task.priority}</span>
+                            {task.due && <span>Due: {task.due}</span>}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))

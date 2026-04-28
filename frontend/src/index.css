@@ -86,6 +86,47 @@ h2 {
   gap: 1rem;
 }
 
+.task-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.task-group + .task-group {
+  padding-top: 0.5rem;
+}
+
+.task-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #d1d5db;
+}
+
+.task-group-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.task-group-header span {
+  min-width: 1.5rem;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #9ca3af;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.task-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .item-card {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 12px;
@@ -155,4 +196,3 @@ input:focus {
   border-color: #6366f1 !important;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
-
