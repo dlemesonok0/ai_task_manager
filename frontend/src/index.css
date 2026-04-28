@@ -129,12 +129,12 @@ h2 {
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem;
 }
 
 .calendar-day {
-  min-height: 150px;
+  min-height: 320px;
   border-radius: 12px;
   padding: 0.75rem;
   background: rgba(0, 0, 0, 0.2);
@@ -161,38 +161,136 @@ h2 {
   font-size: 0.95rem;
 }
 
-.calendar-events {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.calendar-event {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  border-left: 3px solid #10b981;
-  border-radius: 8px;
-  padding: 0.45rem 0.5rem;
-  background: rgba(16, 185, 129, 0.12);
-}
-
-.calendar-event span {
-  color: #a7f3d0;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.calendar-event strong {
-  color: #e5e7eb;
-  font-size: 0.85rem;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
 .calendar-empty {
   color: #6b7280;
   font-size: 0.8rem;
+}
+
+.calendar-timeline {
+  position: relative;
+  height: 1024px;
+  overflow: hidden;
+}
+
+.timeline-hour {
+  height: 64px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.timeline-hour span {
+  color: #6b7280;
+  font-size: 0.68rem;
+}
+
+.calendar-event-block {
+  position: absolute;
+  left: 2.5rem;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-left: 4px solid #10b981;
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  background: rgba(16, 185, 129, 0.18);
+  color: #e5e7eb;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.calendar-event-block:hover {
+  background: rgba(16, 185, 129, 0.28);
+  transform: translateX(2px);
+}
+
+.calendar-event-block span {
+  color: #a7f3d0;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.calendar-event-block strong {
+  max-width: 100%;
+  color: #f3f4f6;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(13, 17, 23, 0.78);
+}
+
+.event-editor {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: #111827;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.4);
+}
+
+.event-editor-header,
+.event-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.event-editor h3 {
+  margin: 0;
+  color: #f3f4f6;
+  font-size: 1.1rem;
+}
+
+.event-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: #d1d5db;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.event-editor input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.7rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f3f4f6;
+}
+
+.event-editor button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f4f6;
+  cursor: pointer;
+}
+
+.event-editor button[type="submit"] {
+  border: none;
+  background: linear-gradient(135deg, #3b82f6, #10b981);
+  font-weight: 700;
 }
 
 .item-card {

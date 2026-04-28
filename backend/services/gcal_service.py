@@ -132,5 +132,41 @@ class GoogleCalendarService:
             print(f"Error creating Google Calendar event: {e}")
             return None
 
+    def update_event(
+        self,
+        event_id: str,
+        calendar_id: str,
+        summary: str,
+        start_time: datetime.datetime,
+        end_time: datetime.datetime
+    ) -> Optional[Dict[str, Any]]:
+        """Update an existing event in the specified calendar."""
+        if not self.service:
+            return None
+
+        event = {
+            'summary': summary,
+            'start': {
+                'dateTime': start_time.isoformat(),
+                'timeZone': 'UTC',
+            },
+            'end': {
+                'dateTime': end_time.isoformat(),
+                'timeZone': 'UTC',
+            },
+        }
+
+        try:
+            updated_event = self.service.events().patch(
+                calendarId=calendar_id,
+                eventId=event_id,
+                body=event
+            ).execute()
+            updated_event['calendarId'] = calendar_id
+            return updated_event
+        except Exception as e:
+            print(f"Error updating Google Calendar event: {e}")
+            return None
+
 # Create a singleton instance (Note: authenticates on import if credentials.json is present)
 gcal_service = GoogleCalendarService()

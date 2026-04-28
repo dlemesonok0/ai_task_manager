@@ -29,6 +29,12 @@ class CalendarEvent(BaseModel):
     start: dict
     end: dict
 
+class CalendarEventUpdate(BaseModel):
+    calendar_id: str = "primary"
+    summary: str
+    start: str
+    end: str
+
 # Allow CORS for the frontend
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +69,31 @@ def get_events():
     """Fetch upcoming events from Google Calendar."""
     events = gcal_service.get_upcoming_events(max_results=20)
     return events
+
+@app.patch("/api/events/{event_id}", response_model=dict, tags=["Calendar"])
+def update_event(event_id: str, event_data: CalendarEventUpdate):
+    """Update an existing Google Calendar event."""
+    from datetime import datetime
+    from fastapi import HTTPException
+
+    try:
+        start_time = datetime.fromisoformat(event_data.start.replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(event_data.end.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid event datetime")
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="Event end must be after start")
+
+    event = gcal_service.update_event(
+        event_id=event_id,
+        calendar_id=event_data.calendar_id,
+        summary=event_data.summary,
+        start_time=start_time,
+        end_time=end_time
+    )
+    if not event:
+        raise HTTPException(status_code=500, detail="Failed to update event")
+    return event
 
 @app.get("/", tags=["Health"])
 def read_root():

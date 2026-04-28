@@ -53,6 +53,52 @@ async def test_get_events(client):
         assert data[0]["summary"] == "Meeting"
 
 @pytest.mark.asyncio
+async def test_update_event(client):
+    mock_event = {
+        "id": "event1",
+        "summary": "Updated Meeting",
+        "calendarId": "work",
+        "start": {"dateTime": "2026-04-26T10:00:00+00:00"},
+        "end": {"dateTime": "2026-04-26T11:00:00+00:00"}
+    }
+
+    with patch("services.gcal_service.gcal_service.update_event") as mock_update:
+        mock_update.return_value = mock_event
+        response = await client.patch("/api/events/event1", json={
+            "calendar_id": "work",
+            "summary": "Updated Meeting",
+            "start": "2026-04-26T10:00:00Z",
+            "end": "2026-04-26T11:00:00Z"
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["summary"] == "Updated Meeting"
+        mock_update.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_update_event_invalid_datetime(client):
+    response = await client.patch("/api/events/event1", json={
+        "calendar_id": "work",
+        "summary": "Updated Meeting",
+        "start": "not-a-date",
+        "end": "2026-04-26T11:00:00Z"
+    })
+
+    assert response.status_code == 400
+
+@pytest.mark.asyncio
+async def test_update_event_invalid_range(client):
+    response = await client.patch("/api/events/event1", json={
+        "calendar_id": "work",
+        "summary": "Updated Meeting",
+        "start": "2026-04-26T11:00:00Z",
+        "end": "2026-04-26T10:00:00Z"
+    })
+
+    assert response.status_code == 400
+
+@pytest.mark.asyncio
 async def test_create_task(client):
     class MockTask:
         def __init__(self, id, content, priority, due=None):
@@ -80,4 +126,3 @@ async def test_create_task_fail(client):
         
         assert response.status_code == 500
         assert response.json()["detail"] == "Failed to create task"
-

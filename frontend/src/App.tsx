@@ -16,6 +16,14 @@ interface Event {
   calendarId?: string;
 }
 
+interface EventEditorState {
+  id: string;
+  calendarId: string;
+  summary: string;
+  start: string;
+  end: string;
+}
+
 interface TaskGroup {
   title: string;
   tasks: Task[];
@@ -45,17 +53,40 @@ const taskGroupLabels: Record<(typeof taskGroupOrder)[number], string> = {
   'no-date': 'No due date'
 };
 
-const dateKey = (date: Date) => date.toISOString().slice(0, 10);
+const dateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const getEventStartDate = (event: Event) => {
   const startValue = event.start?.dateTime || event.start?.date;
   return startValue ? new Date(startValue) : null;
 };
 
+const getEventEndDate = (event: Event) => {
+  const endValue = event.end?.dateTime || event.end?.date;
+  return endValue ? new Date(endValue) : null;
+};
+
+const toDatetimeLocalValue = (date: Date) => {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
+const fromDatetimeLocalValue = (value: string) => new Date(value).toISOString();
+
+const dayStartHour = 7;
+const dayEndHour = 22;
+const timelineHourHeight = 64;
+
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingEvent, setEditingEvent] = useState<EventEditorState | null>(null);
+  const [savingEvent, setSavingEvent] = useState(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -105,6 +136,48 @@ function App() {
     }
   };
 
+  const openEventEditor = (event: Event) => {
+    const start = getEventStartDate(event);
+    const end = getEventEndDate(event);
+    if (!start || !end) return;
+
+    setEditingEvent({
+      id: event.id,
+      calendarId: event.calendarId || 'primary',
+      summary: event.summary || '',
+      start: toDatetimeLocalValue(start),
+      end: toDatetimeLocalValue(end)
+    });
+  };
+
+  const handleUpdateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEvent) return;
+
+    setSavingEvent(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/events/${encodeURIComponent(editingEvent.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calendar_id: editingEvent.calendarId,
+          summary: editingEvent.summary,
+          start: fromDatetimeLocalValue(editingEvent.start),
+          end: fromDatetimeLocalValue(editingEvent.end)
+        })
+      });
+
+      if (res.ok) {
+        setEditingEvent(null);
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Error updating event:", err);
+    } finally {
+      setSavingEvent(false);
+    }
+  };
+
   const formatTime = (isoString?: string) => {
     if (!isoString) return 'All Day';
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -113,6 +186,19 @@ function App() {
   const formatDayName = (date: Date) => date.toLocaleDateString([], { weekday: 'short' });
 
   const formatDayNumber = (date: Date) => date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+
+  const getEventBlockStyle = (event: Event) => {
+    const start = getEventStartDate(event);
+    const end = getEventEndDate(event);
+    if (!start || !end) return {};
+
+    const startMinutes = Math.max(0, (start.getHours() - dayStartHour) * 60 + start.getMinutes());
+    const durationMinutes = Math.max(30, (end.getTime() - start.getTime()) / 60000);
+    const top = (startMinutes / 60) * timelineHourHeight;
+    const height = Math.max(34, (durationMinutes / 60) * timelineHourHeight);
+
+    return { top: `${top}px`, height: `${height}px` };
+  };
 
   const groupedTasks: TaskGroup[] = taskGroupOrder
     .map((groupKey) => ({
@@ -134,6 +220,11 @@ function App() {
       })
     };
   });
+
+  const timelineHours = Array.from(
+    { length: dayEndHour - dayStartHour + 1 },
+    (_, index) => dayStartHour + index
+  );
 
   return (
     <div>
@@ -206,23 +297,75 @@ function App() {
                       <span>{formatDayName(day.date)}</span>
                       <strong>{formatDayNumber(day.date)}</strong>
                     </div>
-                    <div className="calendar-events">
-                      {day.events.length === 0 ? (
-                        <span className="calendar-empty">No events</span>
-                      ) : (
-                        day.events.map((event) => (
-                          <div key={event.id} className="calendar-event">
-                            <span>{formatTime(event.start?.dateTime || event.start?.date)}</span>
-                            <strong>{event.summary || '(No title)'}</strong>
-                          </div>
-                        ))
-                      )}
+                    <div className="calendar-timeline">
+                      {timelineHours.map((hour) => (
+                        <div key={hour} className="timeline-hour">
+                          <span>{String(hour).padStart(2, '0')}:00</span>
+                        </div>
+                      ))}
+                      {day.events.length === 0 && <span className="calendar-empty">No events</span>}
+                      {day.events.map((event) => (
+                        <button
+                          key={event.id}
+                          type="button"
+                          className="calendar-event-block"
+                          style={getEventBlockStyle(event)}
+                          onClick={() => openEventEditor(event)}
+                        >
+                          <span>{formatTime(event.start?.dateTime || event.start?.date)}</span>
+                          <strong>{event.summary || '(No title)'}</strong>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ))
               )}
             </div>
           </section>
+        </div>
+      )}
+
+      {editingEvent && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="event-editor" onSubmit={handleUpdateEvent}>
+            <div className="event-editor-header">
+              <h3>Edit event</h3>
+              <button type="button" onClick={() => setEditingEvent(null)}>Close</button>
+            </div>
+            <label>
+              Title
+              <input
+                type="text"
+                value={editingEvent.summary}
+                onChange={(e) => setEditingEvent({ ...editingEvent, summary: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Starts
+              <input
+                type="datetime-local"
+                value={editingEvent.start}
+                onChange={(e) => setEditingEvent({ ...editingEvent, start: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Ends
+              <input
+                type="datetime-local"
+                value={editingEvent.end}
+                onChange={(e) => setEditingEvent({ ...editingEvent, end: e.target.value })}
+                required
+              />
+            </label>
+            <div className="event-editor-actions">
+              <button type="button" onClick={() => setEditingEvent(null)}>Cancel</button>
+              <button type="submit" disabled={savingEvent}>
+                {savingEvent ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
       

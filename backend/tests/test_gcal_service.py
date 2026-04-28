@@ -84,6 +84,38 @@ def test_create_event_error(gcal_service):
     result = gcal_service.create_event("Fail", datetime.datetime.now(), datetime.datetime.now())
     assert result is None
 
+def test_update_event_success(gcal_service):
+    gcal_service._service.events.return_value.patch.return_value.execute.return_value = {'id': 'event1'}
+
+    start = datetime.datetime(2026, 4, 26, 10, 0, tzinfo=datetime.UTC)
+    end = datetime.datetime(2026, 4, 26, 11, 0, tzinfo=datetime.UTC)
+    event = gcal_service.update_event("event1", "work", "Updated Event", start, end)
+
+    assert event['id'] == 'event1'
+    assert event['calendarId'] == 'work'
+    gcal_service._service.events.return_value.patch.assert_called_with(
+        calendarId='work',
+        eventId='event1',
+        body={
+            'summary': 'Updated Event',
+            'start': {'dateTime': start.isoformat(), 'timeZone': 'UTC'},
+            'end': {'dateTime': end.isoformat(), 'timeZone': 'UTC'},
+        }
+    )
+
+def test_update_event_error(gcal_service):
+    gcal_service._service.events.return_value.patch.return_value.execute.side_effect = Exception("Error")
+
+    result = gcal_service.update_event(
+        "event1",
+        "primary",
+        "Fail",
+        datetime.datetime.now(datetime.UTC),
+        datetime.datetime.now(datetime.UTC)
+    )
+
+    assert result is None
+
 def test_gcal_no_service():
     service = GoogleCalendarService()
     service._service = None
@@ -91,6 +123,7 @@ def test_gcal_no_service():
     with patch.object(GoogleCalendarService, '_authenticate'):
         assert service.get_upcoming_events() == []
         assert service.create_event("test", None, None) is None
+        assert service.update_event("event1", "primary", "test", None, None) is None
 
 def test_authenticate_existing_token():
     with patch('os.path.exists', return_value=True):

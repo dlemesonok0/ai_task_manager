@@ -14,7 +14,8 @@ const mockEvents = [
     id: 'e1', 
     summary: 'Meeting', 
     start: { dateTime: new Date().toISOString() }, 
-    end: { dateTime: new Date(Date.now() + 60 * 60 * 1000).toISOString() } 
+    end: { dateTime: new Date(Date.now() + 60 * 60 * 1000).toISOString() },
+    calendarId: 'primary'
   }
 ];
 
@@ -88,6 +89,40 @@ describe('App Component', () => {
 
     // Check that input is cleared
     expect((input as HTMLInputElement).value).toBe('');
+  });
+
+  it('can edit a calendar event', async () => {
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (options?.method === 'PATCH') {
+        return Promise.resolve({ ok: true, json: async () => ({ ...mockEvents[0], summary: 'Updated Meeting' }) });
+      }
+      if (url.includes('/api/tasks')) {
+        return Promise.resolve({ ok: true, json: async () => mockTasks });
+      }
+      if (url.includes('/api/events')) {
+        return Promise.resolve({ ok: true, json: async () => mockEvents });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Meeting/i }));
+    const titleInput = screen.getByLabelText(/Title/i);
+
+    fireEvent.change(titleInput, { target: { value: 'Updated Meeting' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/events/e1'), expect.objectContaining({
+        method: 'PATCH',
+        body: expect.stringContaining('Updated Meeting')
+      }));
+    });
   });
 
   it('handles fetch errors gracefully', async () => {
