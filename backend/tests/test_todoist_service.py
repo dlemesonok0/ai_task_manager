@@ -55,6 +55,25 @@ async def test_create_task_success(todoist_service):
     todoist_service.api.add_task.assert_called_with(content="New Task", due_string="today", priority=2)
 
 @pytest.mark.asyncio
+async def test_create_task_without_due_string(todoist_service):
+    mock_task = MagicMock()
+    todoist_service.api.add_task = AsyncMock(return_value=mock_task)
+
+    task = await todoist_service.create_task("Inbox Task")
+
+    assert task == mock_task
+    todoist_service.api.add_task.assert_called_with(content="Inbox Task", priority=1)
+
+@pytest.mark.asyncio
+async def test_create_inbox_task(todoist_service):
+    with patch.object(todoist_service, 'create_task', new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = MagicMock()
+
+        await todoist_service.create_inbox_task("Inbox Task")
+
+        mock_create.assert_called_once_with(content="Inbox Task", due_string=None, priority=1)
+
+@pytest.mark.asyncio
 async def test_create_task_error(todoist_service):
     todoist_service.api.add_task = AsyncMock(side_effect=Exception("Error"))
     task = await todoist_service.create_task("New Task")
@@ -87,4 +106,5 @@ async def test_methods_no_api():
     service.api = None
     assert await service.get_active_tasks() == []
     assert await service.create_task("test") is None
+    assert await service.create_inbox_task("test") is None
     assert await service.close_task("1") is False

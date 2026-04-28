@@ -41,6 +41,22 @@ async def command_help_handler(message: Message) -> None:
     )
     await message.answer(help_text, parse_mode="Markdown")
 
+@dp.message(Command("inbox"))
+async def command_inbox_handler(message: Message) -> None:
+    """Creates a Todoist Inbox task without AI parsing or due date."""
+    command_text = message.text or ""
+    task_content = command_text.partition(" ")[2].strip()
+
+    if not task_content:
+        await message.answer("Напиши задачу после команды: /inbox купить молоко")
+        return
+
+    task = await todoist_service.create_inbox_task(task_content)
+    if task:
+        await message.answer(f"✅ Added to Inbox: **{task.content}**", parse_mode="Markdown")
+    else:
+        await message.answer("❌ Failed to create task in Todoist Inbox. Check your API token.")
+
 @dp.message(Command("briefing"))
 async def command_briefing_handler(message: Message) -> None:
     """Generates a daily briefing"""

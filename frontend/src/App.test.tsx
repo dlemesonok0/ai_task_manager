@@ -87,8 +87,9 @@ describe('App Component', () => {
       }));
     });
 
-    // Check that input is cleared
-    expect((input as HTMLInputElement).value).toBe('');
+    await waitFor(() => {
+      expect((input as HTMLInputElement).value).toBe('');
+    });
   });
 
   it('can edit a calendar event', async () => {

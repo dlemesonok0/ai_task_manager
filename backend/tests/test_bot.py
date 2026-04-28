@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from bot import command_start_handler, command_help_handler, command_briefing_handler, command_autoschedule_handler, text_handler
+from bot import command_start_handler, command_help_handler, command_inbox_handler, command_briefing_handler, command_autoschedule_handler, text_handler
 
 @pytest.fixture
 def mock_message():
@@ -21,6 +21,36 @@ async def test_command_help(mock_message):
     await command_help_handler(mock_message)
     mock_message.answer.assert_called()
     assert "Как мной пользоваться" in mock_message.answer.call_args[0][0]
+
+@pytest.mark.asyncio
+async def test_command_inbox(mock_message):
+    mock_message.text = "/inbox Buy milk"
+    with patch('bot.todoist_service') as mock_todoist:
+        mock_todoist.create_inbox_task = AsyncMock(return_value=MagicMock(content="Buy milk"))
+
+        await command_inbox_handler(mock_message)
+
+        mock_todoist.create_inbox_task.assert_called_once_with("Buy milk")
+        mock_message.answer.assert_called()
+        assert "Added to Inbox" in mock_message.answer.call_args[0][0]
+
+@pytest.mark.asyncio
+async def test_command_inbox_empty(mock_message):
+    mock_message.text = "/inbox"
+
+    await command_inbox_handler(mock_message)
+
+    mock_message.answer.assert_called_with("Напиши задачу после команды: /inbox купить молоко")
+
+@pytest.mark.asyncio
+async def test_command_inbox_fail(mock_message):
+    mock_message.text = "/inbox Buy milk"
+    with patch('bot.todoist_service') as mock_todoist:
+        mock_todoist.create_inbox_task = AsyncMock(return_value=None)
+
+        await command_inbox_handler(mock_message)
+
+        mock_message.answer.assert_called_with("❌ Failed to create task in Todoist Inbox. Check your API token.")
 
 @pytest.mark.asyncio
 async def test_command_briefing(mock_message):

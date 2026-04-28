@@ -37,15 +37,22 @@ class TodoistService:
         if not self.api:
             return None
         try:
-            task = await self.api.add_task(
-                content=content,
-                due_string=due_string,
-                priority=priority,
-            )
+            task_data = {
+                "content": content,
+                "priority": priority,
+            }
+            if due_string:
+                task_data["due_string"] = due_string
+
+            task = await self.api.add_task(**task_data)
             return task
         except Exception as error:
             print(f"Error creating task in Todoist: {error}")
             return None
+
+    async def create_inbox_task(self, content: str) -> Optional[Task]:
+        """Create a task in Todoist Inbox without a due date."""
+        return await self.create_task(content=content, due_string=None, priority=1)
 
     async def close_task(self, task_id: str) -> bool:
         """Close a task by ID."""

@@ -55,3 +55,25 @@ jobs:
 
       - name: Run Vitest with coverage
         run: npx vitest run --coverage
+
+  deploy:
+    name: Deploy Backend
+    needs:
+      - backend-tests
+      - frontend-tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || '22' }}
+          script: |
+            mkdir -p ~/ai_task_manager
+            cd ~/ai_task_manager
+            git fetch origin master
+            git reset --hard origin/master
+            docker compose up -d --build --force-recreate
