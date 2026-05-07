@@ -78,6 +78,12 @@ h2 {
   margin: 0;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .auth-panel {
   width: min(420px, 100%);
   display: flex;

@@ -1,7 +1,7 @@
 import logging
 import time
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -9,6 +9,7 @@ from typing import List, Optional
 from services.todoist_service import todoist_service
 from services.gcal_service import gcal_service
 from services.auth_service import authenticate_user, create_access_token, require_auth
+from services import db_service
 from services.logging_service import bind_extra, configure_logging, log_path, monotonic_ms, read_recent_logs
 
 configure_logging()
@@ -57,6 +58,41 @@ class UserResponse(BaseModel):
 
 class LogResponse(BaseModel):
     entries: list[dict]
+
+class SyncResponse(BaseModel):
+    tasks: int
+    events: int
+    state: dict[str, dict]
+
+
+def _task_to_response(task) -> dict:
+    return {
+        "id": task.id,
+        "content": task.content,
+        "priority": task.priority,
+        "due": getattr(task.due, 'string', None) if getattr(task, 'due', None) else None,
+    }
+
+
+async def sync_tasks_cache() -> list[dict]:
+    tasks = await todoist_service.get_active_tasks()
+    cached_tasks = [_task_to_response(task) for task in tasks]
+    db_service.replace_tasks(cached_tasks)
+    logger.info("Synced Todoist tasks into cache", extra=bind_extra(task_count=len(cached_tasks)))
+    return cached_tasks
+
+
+def sync_events_cache() -> list[dict]:
+    events = gcal_service.get_upcoming_events(max_results=20)
+    db_service.replace_events(events)
+    logger.info("Synced calendar events into cache", extra=bind_extra(event_count=len(events)))
+    return events
+
+
+async def sync_all_cache() -> SyncResponse:
+    tasks = await sync_tasks_cache()
+    events = sync_events_cache()
+    return SyncResponse(tasks=len(tasks), events=len(events), state=db_service.get_sync_state())
 
 # Allow CORS for the frontend
 app.add_middleware(
@@ -122,12 +158,24 @@ def download_logs():
         raise HTTPException(status_code=404, detail="Log file not found")
     return FileResponse(path, media_type="application/jsonl", filename=path.name)
 
+@app.post("/api/sync", response_model=SyncResponse, tags=["Sync"], dependencies=[Depends(require_auth)])
+async def sync_data():
+    return await sync_all_cache()
+
+@app.get("/api/sync/state", response_model=dict[str, dict], tags=["Sync"], dependencies=[Depends(require_auth)])
+def get_sync_state():
+    return db_service.get_sync_state()
+
 @app.get("/api/tasks", response_model=List[TaskResponse], tags=["Tasks"], dependencies=[Depends(require_auth)])
-async def get_tasks():
+async def get_tasks(background_tasks: BackgroundTasks, refresh: bool = False):
     """Fetch all active tasks from Todoist."""
-    tasks = await todoist_service.get_active_tasks()
-    logger.info("Fetched active tasks", extra=bind_extra(task_count=len(tasks)))
-    return [{"id": t.id, "content": t.content, "priority": t.priority, "due": getattr(t.due, 'string', None) if getattr(t, 'due', None) else None} for t in tasks]
+    cached_tasks = db_service.get_tasks()
+    if refresh or not cached_tasks:
+        cached_tasks = await sync_tasks_cache()
+    else:
+        background_tasks.add_task(sync_tasks_cache)
+    logger.info("Fetched active tasks from cache", extra=bind_extra(task_count=len(cached_tasks)))
+    return cached_tasks
 
 @app.post("/api/tasks", response_model=TaskResponse, tags=["Tasks"], dependencies=[Depends(require_auth)])
 async def create_task(task_data: TaskCreate):
@@ -139,15 +187,21 @@ async def create_task(task_data: TaskCreate):
     )
     if not task:
         raise HTTPException(status_code=500, detail="Failed to create task")
+    cached_task = _task_to_response(task)
+    db_service.upsert_task(cached_task)
     logger.info("Created Todoist task", extra=bind_extra(task_id=task.id, priority=task.priority))
-    return {"id": task.id, "content": task.content, "priority": task.priority, "due": getattr(task.due, 'string', None) if getattr(task, 'due', None) else None}
+    return cached_task
 
 
 @app.get("/api/events", response_model=List[dict], tags=["Calendar"], dependencies=[Depends(require_auth)])
-def get_events():
+def get_events(background_tasks: BackgroundTasks, refresh: bool = False):
     """Fetch upcoming events from Google Calendar."""
-    events = gcal_service.get_upcoming_events(max_results=20)
-    logger.info("Fetched calendar events", extra=bind_extra(event_count=len(events)))
+    events = db_service.get_events()
+    if refresh or not events:
+        events = sync_events_cache()
+    else:
+        background_tasks.add_task(sync_events_cache)
+    logger.info("Fetched calendar events from cache", extra=bind_extra(event_count=len(events)))
     return events
 
 @app.patch("/api/events/{event_id}", response_model=dict, tags=["Calendar"], dependencies=[Depends(require_auth)])
@@ -171,6 +225,7 @@ def update_event(event_id: str, event_data: CalendarEventUpdate):
     )
     if not event:
         raise HTTPException(status_code=500, detail="Failed to update event")
+    db_service.upsert_event(event)
     logger.info("Updated calendar event", extra=bind_extra(event_id=event_id, calendar_id=event_data.calendar_id))
     return event
 

@@ -93,6 +93,7 @@ function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [authenticating, setAuthenticating] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -197,6 +198,29 @@ function App() {
     }
   };
 
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/sync`, {
+        method: 'POST',
+        headers: authHeaders
+      });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      if (res.ok) {
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Error syncing data:", err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const openEventEditor = (event: Event) => {
     const start = getEventStartDate(event);
     const end = getEventEndDate(event);
@@ -297,9 +321,14 @@ function App() {
       <div className="app-header">
         <h1>AI Task Manager</h1>
         {authToken && (
-          <button type="button" className="btn-secondary" onClick={clearSession}>
-            Sign out
-          </button>
+          <div className="header-actions">
+            <button type="button" className="btn-secondary" onClick={handleSync} disabled={syncing}>
+              {syncing ? 'Syncing...' : 'Refresh'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={clearSession}>
+              Sign out
+            </button>
+          </div>
         )}
       </div>
 

@@ -10,6 +10,7 @@ services:
     env_file:
       - ./backend/.env
     volumes:
+      - ./data:/app/data
       - ./logs:/app/logs
       - ./backend/credentials.json:/app/credentials.json:ro
       - ./backend/token.json:/app/token.json
@@ -24,6 +25,7 @@ services:
     env_file:
       - ./backend/.env
     volumes:
+      - ./data:/app/data
       - ./logs:/app/logs
       - ./backend/credentials.json:/app/credentials.json:ro
       - ./backend/token.json:/app/token.json

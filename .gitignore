@@ -9,3 +9,5 @@ token.json
 backend/token.json
 logs/
 backend/logs/
+data/
+backend/data/
