@@ -94,6 +94,18 @@ function App() {
   const [authError, setAuthError] = useState('');
   const [authenticating, setAuthenticating] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [integrations, setIntegrations] = useState({
+    todoist_api_token: '',
+    google_token_json: '',
+    telegram_bot_token: ''
+  });
+  const [integrationStatus, setIntegrationStatus] = useState({
+    todoist_connected: false,
+    google_connected: false,
+    telegram_connected: false
+  });
+  const [savingIntegrations, setSavingIntegrations] = useState(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -137,8 +149,25 @@ function App() {
     }
   };
 
+  const fetchIntegrations = async () => {
+    if (!authToken) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/integrations`, { headers: authHeaders });
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+      if (res.ok) {
+        setIntegrationStatus(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to fetch integrations:", err);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchIntegrations();
   }, [authToken]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -147,14 +176,15 @@ function App() {
     setAuthenticating(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
 
       if (!res.ok) {
-        setAuthError('Invalid username or password');
+        setAuthError(authMode === 'login' ? 'Invalid username or password' : 'Could not create account');
         return;
       }
 
@@ -195,6 +225,36 @@ function App() {
       console.error("Error adding task:", err);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSaveIntegrations = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingIntegrations(true);
+    try {
+      const payload = Object.fromEntries(
+        Object.entries(integrations).map(([key, value]) => [key, value.trim() || null])
+      );
+      const res = await fetch(`${API_BASE_URL}/api/integrations`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      if (res.ok) {
+        setIntegrationStatus(await res.json());
+        setIntegrations({ todoist_api_token: '', google_token_json: '', telegram_bot_token: '' });
+        await handleSync();
+      }
+    } catch (err) {
+      console.error("Error saving integrations:", err);
+    } finally {
+      setSavingIntegrations(false);
     }
   };
 
@@ -334,7 +394,15 @@ function App() {
 
       {!authToken ? (
         <form onSubmit={handleLogin} className="auth-panel">
-          <h2>Sign in</h2>
+          <div className="auth-tabs">
+            <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
+              Sign in
+            </button>
+            <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')}>
+              Register
+            </button>
+          </div>
+          <h2>{authMode === 'login' ? 'Sign in' : 'Create account'}</h2>
           <label>
             Username
             <input
@@ -357,11 +425,42 @@ function App() {
           </label>
           {authError && <p className="auth-error">{authError}</p>}
           <button type="submit" className="btn-primary" disabled={authenticating}>
-            {authenticating ? 'Signing in...' : 'Sign in'}
+            {authenticating ? 'Please wait...' : authMode === 'login' ? 'Sign in' : 'Register'}
           </button>
         </form>
       ) : (
         <>
+      <form onSubmit={handleSaveIntegrations} className="glass-panel integrations-panel">
+        <div>
+          <h2>Integrations</h2>
+          <div className="integration-status">
+            <span className={integrationStatus.todoist_connected ? 'connected' : ''}>Todoist</span>
+            <span className={integrationStatus.google_connected ? 'connected' : ''}>Google Calendar</span>
+            <span className={integrationStatus.telegram_connected ? 'connected' : ''}>Telegram Bot</span>
+          </div>
+        </div>
+        <input
+          type="password"
+          value={integrations.todoist_api_token}
+          onChange={(e) => setIntegrations({ ...integrations, todoist_api_token: e.target.value })}
+          placeholder="Todoist API token"
+        />
+        <textarea
+          value={integrations.google_token_json}
+          onChange={(e) => setIntegrations({ ...integrations, google_token_json: e.target.value })}
+          placeholder="Google Calendar token.json content"
+          rows={3}
+        />
+        <input
+          type="password"
+          value={integrations.telegram_bot_token}
+          onChange={(e) => setIntegrations({ ...integrations, telegram_bot_token: e.target.value })}
+          placeholder="Telegram bot token"
+        />
+        <button type="submit" className="btn-primary" disabled={savingIntegrations}>
+          {savingIntegrations ? 'Saving...' : 'Save integrations'}
+        </button>
+      </form>
       
       <form onSubmit={handleAddTask} className="glass-panel" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
         <input 

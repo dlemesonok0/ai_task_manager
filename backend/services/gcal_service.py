@@ -1,6 +1,7 @@
 import logging
 import os
 import datetime
+import json
 from typing import List, Dict, Any, Optional
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -15,10 +16,11 @@ logger = logging.getLogger(__name__)
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 class GoogleCalendarService:
-    def __init__(self):
+    def __init__(self, token_json: str | None = None):
         self.creds = None
         self._service = None
         self.credentials_file = os.getenv("GOOGLE_CALENDAR_CREDENTIALS_FILE", "credentials.json")
+        self.token_json = token_json
 
     @property
     def service(self):
@@ -31,7 +33,13 @@ class GoogleCalendarService:
         token_path = os.path.join(os.path.dirname(__file__), '..', 'token.json')
         creds_path = os.path.join(os.path.dirname(__file__), '..', self.credentials_file)
 
-        if os.path.exists(token_path):
+        if self.token_json:
+            try:
+                self.creds = Credentials.from_authorized_user_info(json.loads(self.token_json), SCOPES)
+            except Exception:
+                logger.exception("Error loading user Google token JSON. Token may be empty or invalid")
+                self.creds = None
+        elif os.path.exists(token_path):
             try:
                 self.creds = Credentials.from_authorized_user_file(token_path, SCOPES)
             except Exception:
@@ -59,7 +67,7 @@ class GoogleCalendarService:
                 logger.warning("Google Calendar credentials file is missing. Calendar sync is disabled", extra={"_extra": {"credentials_file": self.credentials_file}})
                 return
 
-            if self.creds:
+            if self.creds and not self.token_json:
                 # Save the credentials for the next run
                 with open(token_path, 'w') as token:
                     token.write(self.creds.to_json())
@@ -172,3 +180,7 @@ class GoogleCalendarService:
 
 # Create a singleton instance (Note: authenticates on import if credentials.json is present)
 gcal_service = GoogleCalendarService()
+
+
+def gcal_service_for_token(token_json: str | None) -> GoogleCalendarService:
+    return GoogleCalendarService(token_json=token_json)

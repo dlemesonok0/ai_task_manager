@@ -48,10 +48,65 @@ describe('App Component', () => {
 
     fireEvent.change(screen.getByLabelText(/Username/i), { target: { value: 'admin' } });
     fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Sign in$/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Sign in$/i }).at(-1)!);
 
     await waitFor(() => {
       expect(localStorage.getItem('ai-task-manager-token')).toBe('new-token');
+    });
+  });
+
+  it('can switch to register mode', () => {
+    localStorage.clear();
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /^Register$/i }));
+    expect(screen.getByRole('heading', { name: 'Create account' })).toBeInTheDocument();
+  });
+
+  it('can save integration tokens', async () => {
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (url.includes('/api/integrations') && options?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            todoist_connected: true,
+            google_connected: true,
+            telegram_connected: true
+          })
+        });
+      }
+      if (url.includes('/api/integrations')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            todoist_connected: false,
+            google_connected: false,
+            telegram_connected: false
+          })
+        });
+      }
+      if (url.includes('/api/sync')) {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/Todoist API token/i), { target: { value: 'todoist-token' } });
+    fireEvent.change(screen.getByPlaceholderText(/Google Calendar token/i), { target: { value: '{"token":"google"}' } });
+    fireEvent.change(screen.getByPlaceholderText(/Telegram bot token/i), { target: { value: 'telegram-token' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save integrations/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/integrations'), expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+        body: expect.stringContaining('todoist-token')
+      }));
     });
   });
 

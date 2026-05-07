@@ -3,11 +3,14 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import time
 from typing import Any
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from services import db_service
 
 
 security = HTTPBearer(auto_error=False)
@@ -43,11 +46,29 @@ def _sign(payload: str) -> str:
     return _encode(signature)
 
 
-def create_access_token(username: str) -> str:
+def hash_password(password: str, salt: str | None = None) -> str:
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("ascii"), 200_000)
+    return f"pbkdf2_sha256${salt}${digest.hex()}"
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        algorithm, salt, expected = password_hash.split("$", 2)
+    except ValueError:
+        return False
+    if algorithm != "pbkdf2_sha256":
+        return False
+    return hmac.compare_digest(hash_password(password, salt), password_hash)
+
+
+def create_access_token(username: str, user_id: int | None = None) -> str:
     payload = {
         "sub": username,
         "exp": int(time.time()) + _token_ttl_seconds(),
     }
+    if user_id is not None:
+        payload["uid"] = user_id
     encoded_payload = _encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     return f"{encoded_payload}.{_sign(encoded_payload)}"
 
@@ -75,7 +96,30 @@ def verify_access_token(token: str) -> dict[str, Any]:
 
 
 def authenticate_user(username: str, password: str) -> bool:
+    user = db_service.get_user_by_username(username)
+    if user:
+        return verify_password(password, user["password_hash"])
     return hmac.compare_digest(username, _expected_username()) and hmac.compare_digest(password, _expected_password())
+
+
+def authenticate_user_record(username: str, password: str) -> dict[str, Any] | None:
+    user = db_service.get_user_by_username(username)
+    if user and verify_password(password, user["password_hash"]):
+        return {"id": user["id"], "username": user["username"]}
+
+    if hmac.compare_digest(username, _expected_username()) and hmac.compare_digest(password, _expected_password()):
+        existing = db_service.get_user_by_username(username)
+        if existing:
+            return {"id": existing["id"], "username": existing["username"]}
+        return db_service.create_user(username, hash_password(password))
+
+    return None
+
+
+def register_user(username: str, password: str) -> dict[str, Any]:
+    if db_service.get_user_by_username(username):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username is already registered")
+    return db_service.create_user(username, hash_password(password))
 
 
 def require_auth(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict[str, Any]:
@@ -85,4 +129,11 @@ def require_auth(credentials: HTTPAuthorizationCredentials | None = Depends(secu
             detail="Authentication required",
         )
 
-    return verify_access_token(credentials.credentials)
+    payload = verify_access_token(credentials.credentials)
+    user_id = payload.get("uid")
+    if not user_id or not db_service.get_user_by_id(int(user_id)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication user no longer exists",
+        )
+    return payload
