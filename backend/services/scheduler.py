@@ -1,8 +1,11 @@
 import datetime
+import logging
 from typing import List, Dict, Any
 from .todoist_service import todoist_service
 from .gcal_service import gcal_service
 from .ai_service import ai_service
+
+logger = logging.getLogger(__name__)
 
 class SchedulerService:
     def __init__(self):
@@ -47,7 +50,7 @@ class SchedulerService:
         """
 
         if not ai_service.client:
-            print("AI client not configured, cannot generate smart schedule.")
+            logger.warning("AI client not configured, cannot generate smart schedule")
             return []
 
         try:
@@ -70,8 +73,8 @@ class SchedulerService:
             import json
             schedule = json.loads(result_text)
             return schedule
-        except Exception as e:
-            print(f"Error generating smart schedule: {e}")
+        except Exception:
+            logger.exception("Error generating smart schedule")
             return []
 
     def apply_schedule_to_calendar(self, schedule: List[Dict[str, Any]]):
@@ -89,7 +92,7 @@ class SchedulerService:
                     end_time=end,
                     description="Auto-scheduled by AI Task Manager"
                 )
-            except Exception as e:
-                print(f"Failed to schedule item {item.get('title')}: {e}")
+            except Exception:
+                logger.exception("Failed to schedule item", extra={"_extra": {"title": item.get("title")}})
 
 scheduler_service = SchedulerService()

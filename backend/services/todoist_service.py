@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import List, Optional
 from todoist_api_python.api_async import TodoistAPIAsync
@@ -5,13 +6,14 @@ from todoist_api_python.models import Task
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class TodoistService:
     def __init__(self):
         token = os.getenv("TODOIST_API_TOKEN")
         if not token or token == "your_todoist_token_here":
             self.api = None
-            print("WARNING: TODOIST_API_TOKEN is not set.")
+            logger.warning("TODOIST_API_TOKEN is not set")
         else:
             self.api = TodoistAPIAsync(token)
 
@@ -28,8 +30,8 @@ class TodoistService:
             async for page in paginator:
                 tasks.extend(page)
             return tasks
-        except Exception as error:
-            print(f"Error fetching tasks from Todoist: {error}")
+        except Exception:
+            logger.exception("Error fetching tasks from Todoist")
             return []
 
     async def create_task(self, content: str, due_string: Optional[str] = None, priority: int = 1) -> Optional[Task]:
@@ -46,8 +48,8 @@ class TodoistService:
 
             task = await self.api.add_task(**task_data)
             return task
-        except Exception as error:
-            print(f"Error creating task in Todoist: {error}")
+        except Exception:
+            logger.exception("Error creating task in Todoist")
             return None
 
     async def create_inbox_task(self, content: str) -> Optional[Task]:
@@ -61,8 +63,8 @@ class TodoistService:
         try:
             is_success = await self.api.close_task(task_id=task_id)
             return is_success
-        except Exception as error:
-            print(f"Error closing task in Todoist: {error}")
+        except Exception:
+            logger.exception("Error closing task in Todoist")
             return False
 
 # Create a singleton instance

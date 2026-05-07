@@ -1,9 +1,11 @@
 import os
 import json
+import logging
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class AIService:
     def __init__(self):
@@ -15,12 +17,12 @@ class AIService:
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
             )
             self.model = "gemini-1.5-flash" # Default fast model
-            print("AI Service initialized with Google Gemini")
+            logger.info("AI Service initialized with Google Gemini")
             
         elif os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "your_openai_api_key_here":
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             self.model = "gpt-4o-mini"
-            print("AI Service initialized with OpenAI")
+            logger.info("AI Service initialized with OpenAI")
             
         elif os.getenv("LLM_BASE_URL"):
             # Using a local model (e.g. Ollama)
@@ -29,11 +31,11 @@ class AIService:
                 base_url=os.getenv("LLM_BASE_URL")
             )
             self.model = os.getenv("LLM_MODEL", "llama3")
-            print(f"AI Service initialized with Local Model ({self.model})")
+            logger.info("AI Service initialized with local model", extra={"_extra": {"model": self.model}})
         else:
             self.client = None
             self.model = "gpt-4o-mini"
-            print("WARNING: No LLM configuration found. AI features will be disabled.")
+            logger.warning("No LLM configuration found. AI features will be disabled")
 
     async def parse_task_nlp(self, text: str) -> dict:
         """
@@ -71,8 +73,8 @@ class AIService:
                 result_text = result_text[3:-3].strip()
                 
             return json.loads(result_text)
-        except Exception as e:
-            print(f"Error parsing NLP task: {e}")
+        except Exception:
+            logger.exception("Error parsing NLP task")
             return {"content": text, "due_string": "today", "priority": 1}
 
 ai_service = AIService()

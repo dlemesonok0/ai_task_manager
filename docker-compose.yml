@@ -10,6 +10,7 @@ services:
     env_file:
       - ./backend/.env
     volumes:
+      - ./logs:/app/logs
       - ./backend/credentials.json:/app/credentials.json:ro
       - ./backend/token.json:/app/token.json
     command: uvicorn main:app --host 0.0.0.0 --port 8000
@@ -23,6 +24,7 @@ services:
     env_file:
       - ./backend/.env
     volumes:
+      - ./logs:/app/logs
       - ./backend/credentials.json:/app/credentials.json:ro
       - ./backend/token.json:/app/token.json
     command: python bot.py
@@ -38,3 +40,13 @@ services:
     depends_on:
       - api
 
+  logs-ui:
+    image: amir20/dozzle:latest
+    container_name: ai_task_manager_logs_ui
+    restart: always
+    ports:
+      - "${DOZZLE_BIND_ADDRESS:-127.0.0.1}:${DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_FILTER: "name=ai_task_manager_*"

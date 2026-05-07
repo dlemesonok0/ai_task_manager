@@ -24,6 +24,17 @@ async def test_tasks_require_authentication(client):
     assert response.status_code == 401
 
 @pytest.mark.asyncio
+async def test_logs_require_authentication(client):
+    response = await client.get("/api/logs")
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_get_logs(client):
+    response = await client.get("/api/logs", headers=await auth_headers(client))
+    assert response.status_code == 200
+    assert "entries" in response.json()
+
+@pytest.mark.asyncio
 async def test_get_tasks(client):
     # Mock Todoist task object
     class MockTask:
