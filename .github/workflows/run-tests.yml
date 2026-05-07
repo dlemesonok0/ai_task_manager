@@ -4,14 +4,36 @@ on:
   push:
     branches:
       - master
+      - main
   pull_request:
     branches:
       - master
+      - main
   workflow_dispatch:
 
 jobs:
+  reject-direct-push:
+    name: Reject Direct Push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Require merge commit on protected branch
+        run: |
+          parent_count="$(git rev-list --parents -n 1 HEAD | wc -w)"
+          if [ "$parent_count" -lt 3 ]; then
+            echo "Direct pushes to master/main are not allowed. Merge a pull request instead."
+            exit 1
+          fi
+
   backend-tests:
     name: Backend Tests
+    needs:
+      - reject-direct-push
+    if: always() && (needs.reject-direct-push.result == 'success' || needs.reject-direct-push.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,6 +58,9 @@ jobs:
 
   frontend-tests:
     name: Frontend Tests
+    needs:
+      - reject-direct-push
+    if: always() && (needs.reject-direct-push.result == 'success' || needs.reject-direct-push.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -57,13 +82,16 @@ jobs:
         run: npx vitest run --coverage
 
   deploy:
-    name: Deploy Backend
+    name: Deploy
     needs:
+      - reject-direct-push
       - backend-tests
       - frontend-tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && needs.reject-direct-push.result == 'success'
     steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -74,6 +102,6 @@ jobs:
           script: |
             mkdir -p ~/ai_task_manager
             cd ~/ai_task_manager
-            git fetch origin master
-            git reset --hard origin/master
+            git fetch origin ${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
             docker compose up -d --build --force-recreate

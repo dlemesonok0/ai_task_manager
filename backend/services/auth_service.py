@@ -1,0 +1,88 @@
+import base64
+import hashlib
+import hmac
+import json
+import os
+import time
+from typing import Any
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+
+security = HTTPBearer(auto_error=False)
+
+
+def _secret_key() -> str:
+    return os.getenv("AUTH_SECRET_KEY") or os.getenv("SECRET_KEY") or "dev-only-auth-secret"
+
+
+def _expected_username() -> str:
+    return os.getenv("AUTH_USERNAME", "admin")
+
+
+def _expected_password() -> str:
+    return os.getenv("AUTH_PASSWORD", "admin")
+
+
+def _token_ttl_seconds() -> int:
+    return int(os.getenv("AUTH_TOKEN_TTL_SECONDS", "86400"))
+
+
+def _encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def _sign(payload: str) -> str:
+    signature = hmac.new(_secret_key().encode("utf-8"), payload.encode("ascii"), hashlib.sha256).digest()
+    return _encode(signature)
+
+
+def create_access_token(username: str) -> str:
+    payload = {
+        "sub": username,
+        "exp": int(time.time()) + _token_ttl_seconds(),
+    }
+    encoded_payload = _encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    return f"{encoded_payload}.{_sign(encoded_payload)}"
+
+
+def verify_access_token(token: str) -> dict[str, Any]:
+    try:
+        encoded_payload, signature = token.split(".", 1)
+        expected_signature = _sign(encoded_payload)
+        if not hmac.compare_digest(signature, expected_signature):
+            raise ValueError("invalid signature")
+        payload = json.loads(_decode(encoded_payload))
+    except (ValueError, json.JSONDecodeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+        )
+
+    if int(payload.get("exp", 0)) < int(time.time()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token has expired",
+        )
+
+    return payload
+
+
+def authenticate_user(username: str, password: str) -> bool:
+    return hmac.compare_digest(username, _expected_username()) and hmac.compare_digest(password, _expected_password())
+
+
+def require_auth(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict[str, Any]:
+    if not credentials or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    return verify_access_token(credentials.credentials)

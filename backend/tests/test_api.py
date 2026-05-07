@@ -1,11 +1,27 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
+async def auth_headers(client):
+    response = await client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
 @pytest.mark.asyncio
 async def test_read_root(client):
     response = await client.get("/")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "message": "AI Task Manager API is running"}
+
+@pytest.mark.asyncio
+async def test_login_rejects_invalid_credentials(client):
+    response = await client.post("/api/auth/login", json={"username": "admin", "password": "wrong"})
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_tasks_require_authentication(client):
+    response = await client.get("/api/tasks")
+    assert response.status_code == 401
 
 @pytest.mark.asyncio
 async def test_get_tasks(client):
@@ -24,7 +40,7 @@ async def test_get_tasks(client):
 
     with patch("services.todoist_service.todoist_service.get_active_tasks", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_tasks
-        response = await client.get("/api/tasks")
+        response = await client.get("/api/tasks", headers=await auth_headers(client))
         
         assert response.status_code == 200
         data = response.json()
@@ -45,7 +61,7 @@ async def test_get_events(client):
 
     with patch("services.gcal_service.gcal_service.get_upcoming_events") as mock_get:
         mock_get.return_value = mock_events
-        response = await client.get("/api/events")
+        response = await client.get("/api/events", headers=await auth_headers(client))
         
         assert response.status_code == 200
         data = response.json()
@@ -69,7 +85,7 @@ async def test_update_event(client):
             "summary": "Updated Meeting",
             "start": "2026-04-26T10:00:00Z",
             "end": "2026-04-26T11:00:00Z"
-        })
+        }, headers=await auth_headers(client))
 
         assert response.status_code == 200
         data = response.json()
@@ -83,7 +99,7 @@ async def test_update_event_invalid_datetime(client):
         "summary": "Updated Meeting",
         "start": "not-a-date",
         "end": "2026-04-26T11:00:00Z"
-    })
+    }, headers=await auth_headers(client))
 
     assert response.status_code == 400
 
@@ -94,7 +110,7 @@ async def test_update_event_invalid_range(client):
         "summary": "Updated Meeting",
         "start": "2026-04-26T11:00:00Z",
         "end": "2026-04-26T10:00:00Z"
-    })
+    }, headers=await auth_headers(client))
 
     assert response.status_code == 400
 
@@ -111,7 +127,7 @@ async def test_create_task(client):
 
     with patch("services.todoist_service.todoist_service.create_task", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = mock_task
-        response = await client.post("/api/tasks", json={"content": "New Task", "priority": 2})
+        response = await client.post("/api/tasks", json={"content": "New Task", "priority": 2}, headers=await auth_headers(client))
         
         assert response.status_code == 200
         data = response.json()
@@ -122,7 +138,7 @@ async def test_create_task(client):
 async def test_create_task_fail(client):
     with patch("services.todoist_service.todoist_service.create_task", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = None
-        response = await client.post("/api/tasks", json={"content": "Fail Task"})
+        response = await client.post("/api/tasks", json={"content": "Fail Task"}, headers=await auth_headers(client))
         
         assert response.status_code == 500
         assert response.json()["detail"] == "Failed to create task"
