@@ -39,3 +39,14 @@ services:
       - "80:80"
     depends_on:
       - api
+
+  logs-ui:
+    image: amir20/dozzle:latest
+    container_name: ai_task_manager_logs_ui
+    restart: always
+    ports:
+      - "${DOZZLE_BIND_ADDRESS:-127.0.0.1}:${DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_FILTER: "name=ai_task_manager_*"
