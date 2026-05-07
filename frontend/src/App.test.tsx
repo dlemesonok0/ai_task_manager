@@ -21,7 +21,38 @@ const mockEvents = [
 
 describe('App Component', () => {
   beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('ai-task-manager-token', 'test-token');
     vi.stubGlobal('fetch', vi.fn());
+  });
+
+  it('renders sign in form when no session token exists', () => {
+    localStorage.clear();
+    render(<App />);
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('can sign in and store the access token', async () => {
+    localStorage.clear();
+    (fetch as any).mockImplementation((url: string) => {
+      if (url.includes('/api/auth/login')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ access_token: 'new-token', token_type: 'bearer' })
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText(/Username/i), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Sign in$/i }));
+
+    await waitFor(() => {
+      expect(localStorage.getItem('ai-task-manager-token')).toBe('new-token');
+    });
   });
 
   it('renders loading state initially', () => {
@@ -83,6 +114,7 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/tasks'), expect.objectContaining({
         method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
         body: expect.stringContaining('Buy Milk')
       }));
     });
@@ -121,6 +153,7 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/events/e1'), expect.objectContaining({
         method: 'PATCH',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
         body: expect.stringContaining('Updated Meeting')
       }));
     });

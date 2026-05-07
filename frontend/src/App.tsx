@@ -80,6 +80,7 @@ const fromDatetimeLocalValue = (value: string) => new Date(value).toISOString();
 const dayStartHour = 7;
 const dayEndHour = 22;
 const timelineHourHeight = 64;
+const authTokenStorageKey = 'ai-task-manager-token';
 
 function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -87,18 +88,44 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [editingEvent, setEditingEvent] = useState<EventEditorState | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem(authTokenStorageKey) || '');
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authenticating, setAuthenticating] = useState(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
   const [newTask, setNewTask] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const authHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+
+  const clearSession = () => {
+    localStorage.removeItem(authTokenStorageKey);
+    setAuthToken('');
+    setTasks([]);
+    setEvents([]);
+    setEditingEvent(null);
+    setLoading(false);
+  };
 
   const fetchData = async () => {
+    if (!authToken) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     try {
       const [tasksRes, eventsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/tasks`),
-        fetch(`${API_BASE_URL}/api/events`)
+        fetch(`${API_BASE_URL}/api/tasks`, { headers: authHeaders }),
+        fetch(`${API_BASE_URL}/api/events`, { headers: authHeaders })
       ]);
+
+      if (tasksRes.status === 401 || eventsRes.status === 401) {
+        clearSession();
+        return;
+      }
       
       if (tasksRes.ok) setTasks(await tasksRes.json());
       if (eventsRes.ok) setEvents(await eventsRes.json());
@@ -111,7 +138,36 @@ function App() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [authToken]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthenticating(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!res.ok) {
+        setAuthError('Invalid username or password');
+        return;
+      }
+
+      const data = await res.json();
+      localStorage.setItem(authTokenStorageKey, data.access_token);
+      setAuthToken(data.access_token);
+      setPassword('');
+    } catch (err) {
+      console.error("Login failed:", err);
+      setAuthError('Authentication service is unavailable');
+    } finally {
+      setAuthenticating(false);
+    }
+  };
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,9 +177,14 @@ function App() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/tasks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ content: newTask, priority: 1, due_string: 'today' })
       });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
       
       if (res.ok) {
         setNewTask('');
@@ -158,7 +219,7 @@ function App() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/events/${encodeURIComponent(editingEvent.id)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           calendar_id: editingEvent.calendarId,
           summary: editingEvent.summary,
@@ -166,6 +227,11 @@ function App() {
           end: fromDatetimeLocalValue(editingEvent.end)
         })
       });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
 
       if (res.ok) {
         setEditingEvent(null);
@@ -228,7 +294,45 @@ function App() {
 
   return (
     <div>
-      <h1>✨ AI Task Manager</h1>
+      <div className="app-header">
+        <h1>AI Task Manager</h1>
+        {authToken && (
+          <button type="button" className="btn-secondary" onClick={clearSession}>
+            Sign out
+          </button>
+        )}
+      </div>
+
+      {!authToken ? (
+        <form onSubmit={handleLogin} className="auth-panel">
+          <h2>Sign in</h2>
+          <label>
+            Username
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          {authError && <p className="auth-error">{authError}</p>}
+          <button type="submit" className="btn-primary" disabled={authenticating}>
+            {authenticating ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      ) : (
+        <>
       
       <form onSubmit={handleAddTask} className="glass-panel" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
         <input 
@@ -372,6 +476,8 @@ function App() {
       <style>{`
         @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
+        </>
+      )}
     </div>
   );
 }

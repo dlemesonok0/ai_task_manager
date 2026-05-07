@@ -10,8 +10,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  reject-direct-push:
+    name: Reject Direct Push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Require merge commit on protected branch
+        run: |
+          parent_count="$(git rev-list --parents -n 1 HEAD | wc -w)"
+          if [ "$parent_count" -lt 3 ]; then
+            echo "Direct pushes to master are not allowed. Merge a pull request instead."
+            exit 1
+          fi
+
   backend-tests:
     name: Backend Tests
+    needs:
+      - reject-direct-push
+    if: always() && (needs.reject-direct-push.result == 'success' || needs.reject-direct-push.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,10 +52,26 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest --cov=. --cov-report=term-missing
+          uv run pytest --cov=. --cov-report=term-missing --cov-report=html | tee coverage.txt
+          {
+            echo "## Backend coverage"
+            echo '```'
+            tail -n 40 coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload backend coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/htmlcov
+          if-no-files-found: error
 
   frontend-tests:
     name: Frontend Tests
+    needs:
+      - reject-direct-push
+    if: always() && (needs.reject-direct-push.result == 'success' || needs.reject-direct-push.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,16 +90,33 @@ jobs:
         run: npm ci
 
       - name: Run Vitest with coverage
-        run: npx vitest run --coverage
+        run: |
+          npx vitest run --coverage --coverage.reporter=text --coverage.reporter=html | tee coverage.txt
+          {
+            echo "## Frontend coverage"
+            echo '```'
+            tail -n 40 coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload frontend coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: error
 
   deploy:
-    name: Deploy Backend
+    name: Deploy
     needs:
+      - reject-direct-push
       - backend-tests
       - frontend-tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master') && needs.reject-direct-push.result == 'success'
     steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -74,6 +127,6 @@ jobs:
           script: |
             mkdir -p ~/ai_task_manager
             cd ~/ai_task_manager
-            git fetch origin master
-            git reset --hard origin/master
+            git fetch origin ${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
             docker compose up -d --build --force-recreate

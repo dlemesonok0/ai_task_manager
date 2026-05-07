@@ -66,6 +66,60 @@ h2 {
   gap: 0.5rem;
 }
 
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.app-header h1 {
+  margin: 0;
+}
+
+.auth-panel {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 8vh auto 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 1.5rem;
+  background: rgba(17, 24, 39, 0.92);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.34);
+}
+
+.auth-panel h2 {
+  margin: 0 0 0.25rem;
+}
+
+.auth-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: #d1d5db;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.auth-panel input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f3f4f6;
+}
+
+.auth-error {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 0.9rem;
+}
+
 /* Grids */
 .dashboard-grid {
   display: grid;
@@ -346,6 +400,15 @@ h2 {
 
 .btn-primary:active {
   transform: translateY(1px);
+}
+
+.btn-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f4f6;
+  cursor: pointer;
 }
 
 button:hover {
