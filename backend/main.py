@@ -21,6 +21,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.on_event("startup")
+def initialize_database():
+    db_service.init_db()
+
 # Pydantic models for documentation
 class TaskCreate(BaseModel):
     content: str

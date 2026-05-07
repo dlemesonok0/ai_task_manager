@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgres://ai_task_manager:change-me@localhost:5432/ai_task_manager")
 _lock = threading.Lock()
+_initialized = False
 
 
 def _connect() -> psycopg.Connection:
@@ -21,6 +22,9 @@ def _now() -> datetime:
 
 
 def init_db() -> None:
+    global _initialized
+    if _initialized:
+        return
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -85,9 +89,16 @@ def init_db() -> None:
                 """
             )
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cached_events_start ON cached_events(user_id, start_value)")
+    _initialized = True
+
+
+def ensure_initialized() -> None:
+    if not _initialized:
+        init_db()
 
 
 def create_user(username: str, password_hash: str) -> dict[str, Any]:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -102,6 +113,7 @@ def create_user(username: str, password_hash: str) -> dict[str, Any]:
 
 
 def get_user_by_username(username: str) -> dict[str, Any] | None:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute("SELECT id, username, password_hash FROM users WHERE username = %s", (username,))
@@ -109,6 +121,7 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
 
 
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
@@ -121,6 +134,7 @@ def upsert_integrations(
     google_token_json: str | None = None,
     telegram_bot_token: str | None = None,
 ) -> None:
+    ensure_initialized()
     current = get_integrations(user_id, include_secrets=True)
     values = {
         "todoist_api_token": todoist_api_token if todoist_api_token is not None else current.get("todoist_api_token"),
@@ -144,6 +158,7 @@ def upsert_integrations(
 
 
 def get_integrations(user_id: int, include_secrets: bool = False) -> dict[str, Any]:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -184,6 +199,7 @@ def get_integrations(user_id: int, include_secrets: bool = False) -> dict[str, A
 
 
 def replace_tasks(user_id: int, tasks: list[dict[str, Any]]) -> None:
+    ensure_initialized()
     synced_at = _now()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
@@ -210,6 +226,7 @@ def replace_tasks(user_id: int, tasks: list[dict[str, Any]]) -> None:
 
 
 def upsert_task(user_id: int, task: dict[str, Any]) -> None:
+    ensure_initialized()
     synced_at = _now()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
@@ -237,6 +254,7 @@ def upsert_task(user_id: int, task: dict[str, Any]) -> None:
 
 
 def get_tasks(user_id: int) -> list[dict[str, Any]]:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute("SELECT payload FROM cached_tasks WHERE user_id = %s ORDER BY synced_at, id", (user_id,))
@@ -245,6 +263,7 @@ def get_tasks(user_id: int) -> list[dict[str, Any]]:
 
 
 def replace_events(user_id: int, events: list[dict[str, Any]]) -> None:
+    ensure_initialized()
     synced_at = _now()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
@@ -260,6 +279,7 @@ def replace_events(user_id: int, events: list[dict[str, Any]]) -> None:
 
 
 def upsert_event(user_id: int, event: dict[str, Any]) -> None:
+    ensure_initialized()
     synced_at = _now()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
@@ -280,6 +300,7 @@ def upsert_event(user_id: int, event: dict[str, Any]) -> None:
 
 
 def get_events(user_id: int) -> list[dict[str, Any]]:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -291,6 +312,7 @@ def get_events(user_id: int) -> list[dict[str, Any]]:
 
 
 def get_sync_state(user_id: int) -> dict[str, dict[str, Any]]:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -308,6 +330,7 @@ def get_sync_state(user_id: int) -> dict[str, dict[str, Any]]:
 
 
 def clear_cache() -> None:
+    ensure_initialized()
     with _lock, _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute("TRUNCATE cached_tasks, cached_events, sync_state, user_integrations, users RESTART IDENTITY CASCADE")
@@ -345,6 +368,3 @@ def _payload(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         return json.loads(value)
     return value
-
-
-init_db()
