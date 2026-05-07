@@ -1,3 +1,4 @@
+import logging
 import os
 import datetime
 from typing import List, Dict, Any, Optional
@@ -8,6 +9,7 @@ from googleapiclient.discovery import build
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -32,8 +34,8 @@ class GoogleCalendarService:
         if os.path.exists(token_path):
             try:
                 self.creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-            except Exception as e:
-                print(f"Error loading token.json: {e}. Token may be empty or invalid.")
+            except Exception:
+                logger.exception("Error loading token.json. Token may be empty or invalid")
                 self.creds = None
         
         # If there are no (valid) credentials available, let the user log in.
@@ -42,19 +44,19 @@ class GoogleCalendarService:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 try:
                     self.creds.refresh(Request())
-                except Exception as e:
-                    print(f"Error refreshing Google Calendar token: {e}")
+                except Exception:
+                    logger.exception("Error refreshing Google Calendar token")
                     self.creds = None
             elif os.path.exists(creds_path):
                 try:
                     flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
                     # This will open a browser window for authentication if running locally
                     self.creds = flow.run_local_server(port=0)
-                except Exception as e:
-                    print(f"Error initializing Google Calendar OAuth flow: {e}")
+                except Exception:
+                    logger.exception("Error initializing Google Calendar OAuth flow")
                     self.creds = None
             else:
-                print(f"WARNING: Google Calendar credentials file '{self.credentials_file}' not found. Calendar sync is disabled.")
+                logger.warning("Google Calendar credentials file is missing. Calendar sync is disabled", extra={"_extra": {"credentials_file": self.credentials_file}})
                 return
 
             if self.creds:
@@ -65,8 +67,8 @@ class GoogleCalendarService:
         if self.creds:
             try:
                 self._service = build('calendar', 'v3', credentials=self.creds)
-            except Exception as e:
-                print(f"Error building Google Calendar service: {e}")
+            except Exception:
+                logger.exception("Error building Google Calendar service")
                 self._service = None
 
     def _get_event_start_value(self, event: Dict[str, Any]) -> str:
@@ -103,8 +105,8 @@ class GoogleCalendarService:
 
             events.sort(key=self._get_event_start_value)
             return events[:max_results]
-        except Exception as e:
-            print(f"Error fetching Google Calendar events: {e}")
+        except Exception:
+            logger.exception("Error fetching Google Calendar events")
             return []
 
     def create_event(self, summary: str, start_time: datetime.datetime, end_time: datetime.datetime, description: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -128,8 +130,8 @@ class GoogleCalendarService:
         try:
             created_event = self.service.events().insert(calendarId='primary', body=event).execute()
             return created_event
-        except Exception as e:
-            print(f"Error creating Google Calendar event: {e}")
+        except Exception:
+            logger.exception("Error creating Google Calendar event")
             return None
 
     def update_event(
@@ -164,8 +166,8 @@ class GoogleCalendarService:
             ).execute()
             updated_event['calendarId'] = calendar_id
             return updated_event
-        except Exception as e:
-            print(f"Error updating Google Calendar event: {e}")
+        except Exception:
+            logger.exception("Error updating Google Calendar event")
             return None
 
 # Create a singleton instance (Note: authenticates on import if credentials.json is present)

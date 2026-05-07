@@ -1,5 +1,6 @@
 import os
 import asyncio
+import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
@@ -8,8 +9,11 @@ from dotenv import load_dotenv
 from services.ai_service import ai_service
 from services.todoist_service import todoist_service
 from services.scheduler import scheduler_service
+from services.logging_service import configure_logging
 
 load_dotenv()
+configure_logging()
+logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -121,11 +125,11 @@ async def text_handler(message: types.Message) -> None:
 async def main() -> None:
     global bot
     if not TOKEN or TOKEN == "your_telegram_bot_token_here":
-        print("WARNING: TELEGRAM_BOT_TOKEN is not set. Bot will not start.")
+        logger.warning("TELEGRAM_BOT_TOKEN is not set. Bot will not start")
         return
         
     bot = Bot(token=TOKEN)
-    print("Starting Telegram Bot Polling...")
+    logger.info("Starting Telegram Bot polling")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

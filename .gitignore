@@ -7,3 +7,5 @@ node_modules/
 credentials.json
 token.json
 backend/token.json
+logs/
+backend/logs/
