@@ -73,7 +73,7 @@ def test_ai_service_init_openai():
     with patch.dict('os.environ', {'GEMINI_API_KEY': '', 'OPENAI_API_KEY': 'sk-test'}):
         with patch('services.ai_service.AsyncOpenAI') as mock_openai:
             service = AIService()
-            assert service.model == "gpt-4o-mini"
+            assert service.model == "gpt-4.1-mini"
 
 def test_ai_service_init_local():
     with patch.dict('os.environ', {'GEMINI_API_KEY': '', 'OPENAI_API_KEY': '', 'LLM_BASE_URL': 'http://local:11434'}):

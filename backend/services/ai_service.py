@@ -21,7 +21,7 @@ class AIService:
             
         elif os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "your_openai_api_key_here":
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            self.model = "gpt-4o-mini"
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
             logger.info("AI Service initialized with OpenAI")
             
         elif os.getenv("LLM_BASE_URL"):
@@ -34,7 +34,7 @@ class AIService:
             logger.info("AI Service initialized with local model", extra={"_extra": {"model": self.model}})
         else:
             self.client = None
-            self.model = "gpt-4o-mini"
+            self.model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
             logger.warning("No LLM configuration found. AI features will be disabled")
 
     async def parse_task_nlp(self, text: str) -> dict:
