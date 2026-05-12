@@ -21,9 +21,6 @@ services:
 
   api:
     image: ${BACKEND_IMAGE:-ghcr.io/dlemesonok0/ai_task_manager-backend:master}
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     container_name: ai_task_manager_api
     restart: always
     env_file:
@@ -41,9 +38,6 @@ services:
 
   bot:
     image: ${BACKEND_IMAGE:-ghcr.io/dlemesonok0/ai_task_manager-backend:master}
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     container_name: ai_task_manager_bot
     restart: always
     env_file:
@@ -61,9 +55,6 @@ services:
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/dlemesonok0/ai_task_manager-frontend:master}
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
     container_name: ai_task_manager_frontend
     restart: always
     ports:

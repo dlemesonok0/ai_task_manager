@@ -167,12 +167,13 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || '22' }}
           script: |
+            set -e
             mkdir -p ~/ai_task_manager
             cd ~/ai_task_manager
             git fetch origin ${{ github.ref_name }}
             git reset --hard origin/${{ github.ref_name }}
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-            export BACKEND_IMAGE=${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-            export FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-            docker compose pull api bot frontend
-            docker compose up -d
+            export BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+            export FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+            docker compose -f docker-compose.yml pull api bot frontend
+            docker compose -f docker-compose.yml up -d --no-build
