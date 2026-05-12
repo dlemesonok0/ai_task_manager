@@ -11,6 +11,114 @@ os.environ.setdefault(
 from main import app
 from services import db_service
 
+
+class FakeDatabase:
+    def __init__(self):
+        self.users = {}
+        self.users_by_id = {}
+        self.next_user_id = 1
+        self.integrations = {}
+        self.tasks = {}
+        self.events = {}
+        self.sync_state = {}
+
+    def clear_cache(self):
+        self.users = {}
+        self.users_by_id = {}
+        self.next_user_id = 1
+        self.integrations = {}
+        self.tasks = {}
+        self.events = {}
+        self.sync_state = {}
+
+    def init_db(self):
+        return None
+
+    def get_user_by_username(self, username):
+        return self.users.get(username)
+
+    def get_user_by_id(self, user_id):
+        return self.users_by_id.get(user_id)
+
+    def create_user(self, username, password_hash):
+        user = {"id": self.next_user_id, "username": username, "password_hash": password_hash}
+        self.next_user_id += 1
+        self.users[username] = user
+        self.users_by_id[user["id"]] = user
+        self.integrations[user["id"]] = {
+            "todoist_api_token": None,
+            "google_token_json": None,
+            "telegram_bot_token": None,
+        }
+        return user
+
+    def get_integrations(self, user_id, include_secrets=False):
+        integrations = self.integrations.get(
+            user_id,
+            {"todoist_api_token": None, "google_token_json": None, "telegram_bot_token": None},
+        )
+        if include_secrets:
+            return dict(integrations)
+        return {key: bool(value) for key, value in integrations.items()}
+
+    def upsert_integrations(self, user_id, todoist_api_token=None, google_token_json=None, telegram_bot_token=None):
+        self.integrations[user_id] = {
+            "todoist_api_token": todoist_api_token,
+            "google_token_json": google_token_json,
+            "telegram_bot_token": telegram_bot_token,
+        }
+
+    def replace_tasks(self, user_id, tasks):
+        self.tasks[user_id] = list(tasks)
+        self.sync_state.setdefault(user_id, {})["tasks"] = {"item_count": len(tasks)}
+
+    def get_tasks(self, user_id):
+        return list(self.tasks.get(user_id, []))
+
+    def upsert_task(self, user_id, task):
+        tasks = [existing for existing in self.tasks.get(user_id, []) if existing["id"] != task["id"]]
+        tasks.append(task)
+        self.tasks[user_id] = tasks
+
+    def replace_events(self, user_id, events):
+        self.events[user_id] = list(events)
+        self.sync_state.setdefault(user_id, {})["events"] = {"item_count": len(events)}
+
+    def get_events(self, user_id):
+        return list(self.events.get(user_id, []))
+
+    def upsert_event(self, user_id, event):
+        events = [existing for existing in self.events.get(user_id, []) if existing["id"] != event["id"]]
+        events.append(event)
+        self.events[user_id] = events
+
+    def get_sync_state(self, user_id):
+        return self.sync_state.get(user_id, {})
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def fake_database(monkeypatch):
+    fake = FakeDatabase()
+    for name in (
+        "clear_cache",
+        "init_db",
+        "get_user_by_username",
+        "get_user_by_id",
+        "create_user",
+        "get_integrations",
+        "upsert_integrations",
+        "replace_tasks",
+        "get_tasks",
+        "upsert_task",
+        "replace_events",
+        "get_events",
+        "upsert_event",
+        "get_sync_state",
+    ):
+        monkeypatch.setattr(db_service, name, getattr(fake, name))
+    yield fake
+
+
 @pytest_asyncio.fixture
 async def client():
     db_service.clear_cache()
