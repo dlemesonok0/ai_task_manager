@@ -9,8 +9,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class TodoistService:
-    def __init__(self):
-        token = os.getenv("TODOIST_API_TOKEN")
+    def __init__(self, token: str | None = None):
+        token = token if token is not None else os.getenv("TODOIST_API_TOKEN")
         if not token or token == "your_todoist_token_here":
             self.api = None
             logger.warning("TODOIST_API_TOKEN is not set")
@@ -69,3 +69,7 @@ class TodoistService:
 
 # Create a singleton instance
 todoist_service = TodoistService()
+
+
+def todoist_service_for_token(token: str | None) -> TodoistService:
+    return TodoistService(token=token)

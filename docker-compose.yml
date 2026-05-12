@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: ai_task_manager_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_task_manager}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_task_manager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_task_manager} -d ${POSTGRES_DB:-ai_task_manager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: ./backend
@@ -9,12 +27,16 @@ services:
     restart: always
     env_file:
       - ./backend/.env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ai_task_manager}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-ai_task_manager}
     volumes:
-      - ./data:/app/data
       - ./logs:/app/logs
       - ./backend/credentials.json:/app/credentials.json:ro
       - ./backend/token.json:/app/token.json
     command: uvicorn main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      db:
+        condition: service_healthy
 
   bot:
     build:
@@ -24,12 +46,16 @@ services:
     restart: always
     env_file:
       - ./backend/.env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ai_task_manager}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-ai_task_manager}
     volumes:
-      - ./data:/app/data
       - ./logs:/app/logs
       - ./backend/credentials.json:/app/credentials.json:ro
       - ./backend/token.json:/app/token.json
     command: python bot.py
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     build:
@@ -52,3 +78,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       DOZZLE_FILTER: "name=ai_task_manager_*"
+
+volumes:
+  postgres_data:

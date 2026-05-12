@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 async def auth_headers(client):
     response = await client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
@@ -49,8 +49,9 @@ async def test_get_tasks(client):
         MockTask("2", "Test Task 2", 4)
     ]
 
-    with patch("services.todoist_service.todoist_service.get_active_tasks", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = mock_tasks
+    service = MagicMock()
+    service.get_active_tasks = AsyncMock(return_value=mock_tasks)
+    with patch("main.todoist_service_for_token", return_value=service):
         response = await client.get("/api/tasks", headers=await auth_headers(client))
         
         assert response.status_code == 200
@@ -70,8 +71,9 @@ async def test_get_events(client):
         }
     ]
 
-    with patch("services.gcal_service.gcal_service.get_upcoming_events") as mock_get:
-        mock_get.return_value = mock_events
+    service = MagicMock()
+    service.get_upcoming_events.return_value = mock_events
+    with patch("main.gcal_service_for_token", return_value=service):
         response = await client.get("/api/events", headers=await auth_headers(client))
         
         assert response.status_code == 200
@@ -89,8 +91,9 @@ async def test_update_event(client):
         "end": {"dateTime": "2026-04-26T11:00:00+00:00"}
     }
 
-    with patch("services.gcal_service.gcal_service.update_event") as mock_update:
-        mock_update.return_value = mock_event
+    service = MagicMock()
+    service.update_event.return_value = mock_event
+    with patch("main.gcal_service_for_token", return_value=service):
         response = await client.patch("/api/events/event1", json={
             "calendar_id": "work",
             "summary": "Updated Meeting",
@@ -101,7 +104,7 @@ async def test_update_event(client):
         assert response.status_code == 200
         data = response.json()
         assert data["summary"] == "Updated Meeting"
-        mock_update.assert_called_once()
+        service.update_event.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_update_event_invalid_datetime(client):
@@ -136,8 +139,9 @@ async def test_create_task(client):
 
     mock_task = MockTask("123", "New Task", 2)
 
-    with patch("services.todoist_service.todoist_service.create_task", new_callable=AsyncMock) as mock_post:
-        mock_post.return_value = mock_task
+    service = MagicMock()
+    service.create_task = AsyncMock(return_value=mock_task)
+    with patch("main.todoist_service_for_token", return_value=service):
         response = await client.post("/api/tasks", json={"content": "New Task", "priority": 2}, headers=await auth_headers(client))
         
         assert response.status_code == 200
@@ -147,8 +151,9 @@ async def test_create_task(client):
 
 @pytest.mark.asyncio
 async def test_create_task_fail(client):
-    with patch("services.todoist_service.todoist_service.create_task", new_callable=AsyncMock) as mock_post:
-        mock_post.return_value = None
+    service = MagicMock()
+    service.create_task = AsyncMock(return_value=None)
+    with patch("main.todoist_service_for_token", return_value=service):
         response = await client.post("/api/tasks", json={"content": "Fail Task"}, headers=await auth_headers(client))
         
         assert response.status_code == 500
