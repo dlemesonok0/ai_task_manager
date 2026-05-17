@@ -78,6 +78,13 @@ class IntegrationStatus(BaseModel):
     google_connected: bool
     telegram_connected: bool
     updated_at: Optional[str] = None
+    telegram_username: Optional[str] = None
+    telegram_linked_at: Optional[str] = None
+
+class TelegramLinkCodeResponse(BaseModel):
+    code: str
+    expires_at: str
+    command: str
 
 class SyncResponse(BaseModel):
     tasks: int
@@ -100,6 +107,15 @@ def current_user_id(auth_payload: dict) -> int:
 
 def user_integrations(user_id: int) -> dict:
     return db_service.get_integrations(user_id, include_secrets=True)
+
+
+def integration_status(user_id: int) -> dict:
+    status_data = db_service.get_integrations(user_id)
+    telegram_link = db_service.get_telegram_link(user_id)
+    status_data["telegram_connected"] = bool(telegram_link)
+    status_data["telegram_username"] = telegram_link.get("telegram_username") if telegram_link else None
+    status_data["telegram_linked_at"] = telegram_link.get("linked_at") if telegram_link else None
+    return status_data
 
 
 async def sync_tasks_cache(user_id: int) -> list[dict]:
@@ -191,7 +207,7 @@ def read_current_user(auth_payload: dict = Depends(require_auth)):
 
 @app.get("/api/integrations", response_model=IntegrationStatus, tags=["Integrations"], dependencies=[Depends(require_auth)])
 def get_integrations(auth_payload: dict = Depends(require_auth)):
-    return db_service.get_integrations(current_user_id(auth_payload))
+    return integration_status(current_user_id(auth_payload))
 
 @app.put("/api/integrations", response_model=IntegrationStatus, tags=["Integrations"], dependencies=[Depends(require_auth)])
 def update_integrations(integrations: IntegrationUpdate, auth_payload: dict = Depends(require_auth)):
@@ -206,9 +222,16 @@ def update_integrations(integrations: IntegrationUpdate, auth_payload: dict = De
         user_id,
         todoist_api_token=integrations.todoist_api_token,
         google_token_json=integrations.google_token_json,
-        telegram_bot_token=integrations.telegram_bot_token,
     )
-    return db_service.get_integrations(user_id)
+    return integration_status(user_id)
+
+@app.post("/api/telegram/link-code", response_model=TelegramLinkCodeResponse, tags=["Integrations"], dependencies=[Depends(require_auth)])
+def create_telegram_link_code(auth_payload: dict = Depends(require_auth)):
+    link_code = db_service.create_telegram_link_code(current_user_id(auth_payload))
+    return {
+        **link_code,
+        "command": f"/link {link_code['code']}",
+    }
 
 @app.get("/api/logs", response_model=LogResponse, tags=["Logs"], dependencies=[Depends(require_auth)])
 def get_logs(limit: int = 200):

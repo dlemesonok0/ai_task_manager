@@ -1,10 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from bot import command_start_handler, command_help_handler, command_inbox_handler, command_briefing_handler, command_autoschedule_handler, text_handler
+from bot import command_start_handler, command_help_handler, command_link_handler, command_inbox_handler, command_briefing_handler, command_autoschedule_handler, text_handler
 
 @pytest.fixture
 def mock_message():
     message = AsyncMock()
+    message.from_user.id = 1001
+    message.from_user.username = "test_user"
     message.from_user.full_name = "Test User"
     message.text = "Test message"
     message.answer = AsyncMock()
@@ -12,6 +14,7 @@ def mock_message():
 
 @pytest.mark.asyncio
 async def test_command_start(mock_message):
+    mock_message.text = "/start"
     await command_start_handler(mock_message)
     mock_message.answer.assert_called()
     assert "Привет" in mock_message.answer.call_args[0][0]
@@ -23,9 +26,29 @@ async def test_command_help(mock_message):
     assert "Как мной пользоваться" in mock_message.answer.call_args[0][0]
 
 @pytest.mark.asyncio
+async def test_command_link(mock_message):
+    mock_message.text = "/link ABCD1234"
+    with patch('bot.db_service') as mock_db:
+        mock_db.consume_telegram_link_code.return_value = {"id": 1, "username": "admin"}
+
+        await command_link_handler(mock_message)
+
+        mock_db.consume_telegram_link_code.assert_called_once_with(
+            code="ABCD1234",
+            telegram_user_id=1001,
+            telegram_username="test_user",
+        )
+        mock_message.answer.assert_called()
+        assert "привязан" in mock_message.answer.call_args[0][0]
+
+@pytest.mark.asyncio
 async def test_command_inbox(mock_message):
     mock_message.text = "/inbox Buy milk"
-    with patch('bot.todoist_service') as mock_todoist:
+    with patch('bot.db_service') as mock_db, patch('bot.todoist_service_for_token') as service_factory:
+        mock_db.get_user_by_telegram_id.return_value = {"id": 1, "username": "admin"}
+        mock_db.get_integrations.return_value = {"todoist_api_token": "token"}
+        mock_todoist = MagicMock()
+        service_factory.return_value = mock_todoist
         mock_todoist.create_inbox_task = AsyncMock(return_value=MagicMock(content="Buy milk"))
 
         await command_inbox_handler(mock_message)
@@ -45,7 +68,11 @@ async def test_command_inbox_empty(mock_message):
 @pytest.mark.asyncio
 async def test_command_inbox_fail(mock_message):
     mock_message.text = "/inbox Buy milk"
-    with patch('bot.todoist_service') as mock_todoist:
+    with patch('bot.db_service') as mock_db, patch('bot.todoist_service_for_token') as service_factory:
+        mock_db.get_user_by_telegram_id.return_value = {"id": 1, "username": "admin"}
+        mock_db.get_integrations.return_value = {"todoist_api_token": "token"}
+        mock_todoist = MagicMock()
+        service_factory.return_value = mock_todoist
         mock_todoist.create_inbox_task = AsyncMock(return_value=None)
 
         await command_inbox_handler(mock_message)
@@ -54,7 +81,11 @@ async def test_command_inbox_fail(mock_message):
 
 @pytest.mark.asyncio
 async def test_command_briefing(mock_message):
-    with patch('bot.todoist_service') as mock_todoist:
+    with patch('bot.db_service') as mock_db, patch('bot.todoist_service_for_token') as service_factory:
+        mock_db.get_user_by_telegram_id.return_value = {"id": 1, "username": "admin"}
+        mock_db.get_integrations.return_value = {"todoist_api_token": "token"}
+        mock_todoist = MagicMock()
+        service_factory.return_value = mock_todoist
         mock_todoist.get_active_tasks = AsyncMock(return_value=[MagicMock(content="Task 1", priority=1)])
         await command_briefing_handler(mock_message)
         mock_message.answer.assert_called()
@@ -62,39 +93,35 @@ async def test_command_briefing(mock_message):
 
 @pytest.mark.asyncio
 async def test_command_briefing_empty(mock_message):
-    with patch('bot.todoist_service') as mock_todoist:
+    with patch('bot.db_service') as mock_db, patch('bot.todoist_service_for_token') as service_factory:
+        mock_db.get_user_by_telegram_id.return_value = {"id": 1, "username": "admin"}
+        mock_db.get_integrations.return_value = {"todoist_api_token": "token"}
+        mock_todoist = MagicMock()
+        service_factory.return_value = mock_todoist
         mock_todoist.get_active_tasks = AsyncMock(return_value=[])
         await command_briefing_handler(mock_message)
         mock_message.answer.assert_called_with("You have no active tasks for today. Enjoy your day!")
 
 @pytest.mark.asyncio
 async def test_command_autoschedule(mock_message):
-    with patch('bot.scheduler_service') as mock_scheduler:
-        mock_scheduler.generate_smart_schedule = AsyncMock(return_value=[{"title": "S", "start_time": "10:00", "end_time": "11:00"}])
-        
-        status_msg = AsyncMock()
-        mock_message.answer.return_value = status_msg
-        
-        await command_autoschedule_handler(mock_message)
-        mock_scheduler.apply_schedule_to_calendar.assert_called()
-        assert "Your AI Schedule" in mock_message.answer.call_args_list[1][0][0]
+    await command_autoschedule_handler(mock_message)
+    assert "web-сценарии" in mock_message.answer.call_args[0][0]
 
 @pytest.mark.asyncio
 async def test_command_autoschedule_fail(mock_message):
-    with patch('bot.scheduler_service') as mock_scheduler:
-        mock_scheduler.generate_smart_schedule = AsyncMock(return_value=[])
-        
-        status_msg = AsyncMock()
-        mock_message.answer.return_value = status_msg
-        
-        await command_autoschedule_handler(mock_message)
-        status_msg.edit_text.assert_called_with("❌ Could not generate a schedule. Ensure you have active tasks and AI configured.")
+    await command_autoschedule_handler(mock_message)
+    mock_message.answer.assert_called()
 
 @pytest.mark.asyncio
 async def test_text_handler(mock_message):
     with patch('bot.ai_service') as mock_ai, \
-         patch('bot.todoist_service') as mock_todoist:
+         patch('bot.db_service') as mock_db, \
+         patch('bot.todoist_service_for_token') as service_factory:
         
+        mock_db.get_user_by_telegram_id.return_value = {"id": 1, "username": "admin"}
+        mock_db.get_integrations.return_value = {"todoist_api_token": "token"}
+        mock_todoist = MagicMock()
+        service_factory.return_value = mock_todoist
         mock_ai.parse_task_nlp = AsyncMock(return_value={"content": "New", "due_string": "today", "priority": 1})
         mock_todoist.create_task = AsyncMock(return_value=MagicMock(content="New"))
         
@@ -109,8 +136,13 @@ async def test_text_handler(mock_message):
 @pytest.mark.asyncio
 async def test_text_handler_fail(mock_message):
     with patch('bot.ai_service') as mock_ai, \
-         patch('bot.todoist_service') as mock_todoist:
+         patch('bot.db_service') as mock_db, \
+         patch('bot.todoist_service_for_token') as service_factory:
         
+        mock_db.get_user_by_telegram_id.return_value = {"id": 1, "username": "admin"}
+        mock_db.get_integrations.return_value = {"todoist_api_token": "token"}
+        mock_todoist = MagicMock()
+        service_factory.return_value = mock_todoist
         mock_ai.parse_task_nlp = AsyncMock(return_value={})
         mock_todoist.create_task = AsyncMock(return_value=None)
         

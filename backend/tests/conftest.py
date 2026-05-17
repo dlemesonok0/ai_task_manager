@@ -21,6 +21,8 @@ class FakeDatabase:
         self.tasks = {}
         self.events = {}
         self.sync_state = {}
+        self.telegram_links = {}
+        self.telegram_codes = {}
 
     def clear_cache(self):
         self.users = {}
@@ -30,6 +32,8 @@ class FakeDatabase:
         self.tasks = {}
         self.events = {}
         self.sync_state = {}
+        self.telegram_links = {}
+        self.telegram_codes = {}
 
     def init_db(self):
         return None
@@ -59,7 +63,12 @@ class FakeDatabase:
         )
         if include_secrets:
             return dict(integrations)
-        return {key: bool(value) for key, value in integrations.items()}
+        return {
+            "todoist_connected": bool(integrations.get("todoist_api_token")),
+            "google_connected": bool(integrations.get("google_token_json")),
+            "telegram_connected": bool(integrations.get("telegram_bot_token")),
+            "updated_at": None,
+        }
 
     def upsert_integrations(self, user_id, todoist_api_token=None, google_token_json=None, telegram_bot_token=None):
         self.integrations[user_id] = {
@@ -67,6 +76,34 @@ class FakeDatabase:
             "google_token_json": google_token_json,
             "telegram_bot_token": telegram_bot_token,
         }
+
+    def create_telegram_link_code(self, user_id, ttl_minutes=15):
+        code = "ABCD1234"
+        self.telegram_codes[code] = user_id
+        return {"code": code, "expires_at": "2026-05-17T12:15:00+00:00"}
+
+    def get_telegram_link(self, user_id):
+        return self.telegram_links.get(user_id)
+
+    def get_user_by_telegram_id(self, telegram_user_id):
+        for user_id, link in self.telegram_links.items():
+            if link["telegram_user_id"] == telegram_user_id:
+                user = self.users_by_id[user_id]
+                return {**user, **link}
+        return None
+
+    def consume_telegram_link_code(self, code, telegram_user_id, telegram_username=None):
+        user_id = self.telegram_codes.pop(code.strip().upper(), None)
+        if not user_id:
+            return None
+        link = {
+            "user_id": user_id,
+            "telegram_user_id": telegram_user_id,
+            "telegram_username": telegram_username,
+            "linked_at": "2026-05-17T12:00:00+00:00",
+        }
+        self.telegram_links[user_id] = link
+        return self.users_by_id[user_id]
 
     def replace_tasks(self, user_id, tasks):
         self.tasks[user_id] = list(tasks)
@@ -107,6 +144,10 @@ async def fake_database(monkeypatch):
         "create_user",
         "get_integrations",
         "upsert_integrations",
+        "create_telegram_link_code",
+        "get_telegram_link",
+        "get_user_by_telegram_id",
+        "consume_telegram_link_code",
         "replace_tasks",
         "get_tasks",
         "upsert_task",
