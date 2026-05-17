@@ -158,3 +158,12 @@ async def test_create_task_fail(client):
         
         assert response.status_code == 500
         assert response.json()["detail"] == "Failed to create task"
+
+@pytest.mark.asyncio
+async def test_create_telegram_link_code(client):
+    response = await client.post("/api/telegram/link-code", headers=await auth_headers(client))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["code"] == "ABCD1234"
+    assert data["command"] == "/link ABCD1234"

@@ -1,7 +1,8 @@
 import json
 import os
+import secrets
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import psycopg
@@ -50,6 +51,26 @@ def init_db() -> None:
             )
             cursor.execute(
                 """
+                CREATE TABLE IF NOT EXISTS telegram_user_links (
+                    user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    telegram_user_id BIGINT NOT NULL UNIQUE,
+                    telegram_username TEXT,
+                    linked_at TIMESTAMPTZ NOT NULL
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS telegram_link_codes (
+                    code TEXT PRIMARY KEY,
+                    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL
+                )
+                """
+            )
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS cached_tasks (
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     id TEXT NOT NULL,
@@ -89,6 +110,7 @@ def init_db() -> None:
                 """
             )
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cached_events_start ON cached_events(user_id, start_value)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_telegram_link_codes_user ON telegram_link_codes(user_id)")
     _initialized = True
 
 
@@ -126,6 +148,114 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
         with connection.cursor() as cursor:
             cursor.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
             return cursor.fetchone()
+
+
+def create_telegram_link_code(user_id: int, ttl_minutes: int = 15) -> dict[str, Any]:
+    ensure_initialized()
+    now = _now()
+    expires_at = now + timedelta(minutes=ttl_minutes)
+    with _lock, _connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM telegram_link_codes WHERE user_id = %s OR expires_at <= %s", (user_id, now))
+            while True:
+                code = secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:8].upper()
+                try:
+                    cursor.execute(
+                        """
+                        INSERT INTO telegram_link_codes (code, user_id, expires_at, created_at)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (code, user_id, expires_at, now),
+                    )
+                    break
+                except psycopg.errors.UniqueViolation:
+                    connection.rollback()
+                    continue
+    return {"code": code, "expires_at": expires_at.isoformat()}
+
+
+def get_telegram_link(user_id: int) -> dict[str, Any] | None:
+    ensure_initialized()
+    with _lock, _connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT user_id, telegram_user_id, telegram_username, linked_at
+                FROM telegram_user_links
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cursor.fetchone()
+    return _telegram_link_payload(row)
+
+
+def get_user_by_telegram_id(telegram_user_id: int) -> dict[str, Any] | None:
+    ensure_initialized()
+    with _lock, _connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT u.id, u.username, l.telegram_user_id, l.telegram_username, l.linked_at
+                FROM telegram_user_links l
+                JOIN users u ON u.id = l.user_id
+                WHERE l.telegram_user_id = %s
+                """,
+                (telegram_user_id,),
+            )
+            row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "telegram_user_id": row["telegram_user_id"],
+        "telegram_username": row["telegram_username"],
+        "linked_at": row["linked_at"].isoformat() if row["linked_at"] else None,
+    }
+
+
+def consume_telegram_link_code(code: str, telegram_user_id: int, telegram_username: str | None = None) -> dict[str, Any] | None:
+    ensure_initialized()
+    normalized_code = code.strip().upper()
+    now = _now()
+    with _lock, _connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT c.user_id, u.username
+                FROM telegram_link_codes c
+                JOIN users u ON u.id = c.user_id
+                WHERE c.code = %s AND c.expires_at > %s
+                """,
+                (normalized_code, now),
+            )
+            row = cursor.fetchone()
+            if not row:
+                cursor.execute("DELETE FROM telegram_link_codes WHERE code = %s OR expires_at <= %s", (normalized_code, now))
+                return None
+
+            cursor.execute("DELETE FROM telegram_user_links WHERE telegram_user_id = %s", (telegram_user_id,))
+            cursor.execute(
+                """
+                INSERT INTO telegram_user_links (user_id, telegram_user_id, telegram_username, linked_at)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    telegram_user_id = EXCLUDED.telegram_user_id,
+                    telegram_username = EXCLUDED.telegram_username,
+                    linked_at = EXCLUDED.linked_at
+                """,
+                (row["user_id"], telegram_user_id, telegram_username, now),
+            )
+            cursor.execute("DELETE FROM telegram_link_codes WHERE user_id = %s", (row["user_id"],))
+            return {"id": row["user_id"], "username": row["username"]}
+
+
+def unlink_telegram_user(user_id: int) -> None:
+    ensure_initialized()
+    with _lock, _connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM telegram_user_links WHERE user_id = %s", (user_id,))
 
 
 def upsert_integrations(
@@ -368,3 +498,14 @@ def _payload(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         return json.loads(value)
     return value
+
+
+def _telegram_link_payload(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "telegram_user_id": row["telegram_user_id"],
+        "telegram_username": row["telegram_username"],
+        "linked_at": row["linked_at"].isoformat() if row["linked_at"] else None,
+    }

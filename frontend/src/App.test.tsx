@@ -70,7 +70,19 @@ describe('App Component', () => {
           json: async () => ({
             todoist_connected: true,
             google_connected: true,
-            telegram_connected: true
+            telegram_connected: true,
+            telegram_username: 'test_user',
+            telegram_linked_at: new Date().toISOString()
+          })
+        });
+      }
+      if (url.includes('/api/telegram/link-code')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            code: 'ABCD1234',
+            command: '/link ABCD1234',
+            expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
           })
         });
       }
@@ -80,7 +92,9 @@ describe('App Component', () => {
           json: async () => ({
             todoist_connected: false,
             google_connected: false,
-            telegram_connected: false
+            telegram_connected: false,
+            telegram_username: null,
+            telegram_linked_at: null
           })
         });
       }
@@ -98,7 +112,6 @@ describe('App Component', () => {
 
     fireEvent.change(screen.getByPlaceholderText(/Todoist API token/i), { target: { value: 'todoist-token' } });
     fireEvent.change(screen.getByPlaceholderText(/Google Calendar token/i), { target: { value: '{"token":"google"}' } });
-    fireEvent.change(screen.getByPlaceholderText(/Telegram bot token/i), { target: { value: 'telegram-token' } });
     fireEvent.click(screen.getByRole('button', { name: /Save integrations/i }));
 
     await waitFor(() => {
@@ -107,6 +120,12 @@ describe('App Component', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
         body: expect.stringContaining('todoist-token')
       }));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Create Telegram link/i }));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('/link ABCD1234')).toBeInTheDocument();
     });
   });
 

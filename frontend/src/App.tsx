@@ -86,6 +86,7 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
   const [editingEvent, setEditingEvent] = useState<EventEditorState | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(authTokenStorageKey) || '');
@@ -97,15 +98,19 @@ function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [integrations, setIntegrations] = useState({
     todoist_api_token: '',
-    google_token_json: '',
-    telegram_bot_token: ''
+    google_token_json: ''
   });
   const [integrationStatus, setIntegrationStatus] = useState({
     todoist_connected: false,
     google_connected: false,
-    telegram_connected: false
+    telegram_connected: false,
+    telegram_username: null as string | null,
+    telegram_linked_at: null as string | null
   });
   const [savingIntegrations, setSavingIntegrations] = useState(false);
+  const [telegramLinkCommand, setTelegramLinkCommand] = useState('');
+  const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState('');
+  const [creatingTelegramLink, setCreatingTelegramLink] = useState(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -119,6 +124,7 @@ function App() {
     setTasks([]);
     setEvents([]);
     setEditingEvent(null);
+    setFetchError('');
     setLoading(false);
   };
 
@@ -129,6 +135,7 @@ function App() {
     }
 
     setLoading(true);
+    setFetchError('');
     try {
       const [tasksRes, eventsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/tasks`, { headers: authHeaders }),
@@ -140,10 +147,16 @@ function App() {
         return;
       }
       
-      if (tasksRes.ok) setTasks(await tasksRes.json());
-      if (eventsRes.ok) setEvents(await eventsRes.json());
+      if (!tasksRes.ok || !eventsRes.ok) {
+        setFetchError('Could not load today\'s plan. Refresh to try again.');
+        return;
+      }
+
+      setTasks(await tasksRes.json());
+      setEvents(await eventsRes.json());
     } catch (err) {
       console.error("Failed to fetch data:", err);
+      setFetchError('Could not load today\'s plan. Refresh to try again.');
     } finally {
       setLoading(false);
     }
@@ -248,7 +261,7 @@ function App() {
 
       if (res.ok) {
         setIntegrationStatus(await res.json());
-        setIntegrations({ todoist_api_token: '', google_token_json: '', telegram_bot_token: '' });
+        setIntegrations({ todoist_api_token: '', google_token_json: '' });
         await handleSync();
       }
     } catch (err) {
@@ -278,6 +291,31 @@ function App() {
       console.error("Error syncing data:", err);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleCreateTelegramLink = async () => {
+    setCreatingTelegramLink(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/telegram/link-code`, {
+        method: 'POST',
+        headers: authHeaders
+      });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        setTelegramLinkCommand(data.command);
+        setTelegramLinkExpiresAt(data.expires_at);
+      }
+    } catch (err) {
+      console.error("Error creating Telegram link code:", err);
+    } finally {
+      setCreatingTelegramLink(false);
     }
   };
 
@@ -337,6 +375,9 @@ function App() {
 
   const formatDayNumber = (date: Date) => date.toLocaleDateString([], { day: 'numeric', month: 'short' });
 
+  const formatFullDay = (date: Date) =>
+    date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
   const getEventBlockStyle = (event: Event) => {
     const start = getEventStartDate(event);
     const end = getEventEndDate(event);
@@ -350,12 +391,46 @@ function App() {
     return { top: `${top}px`, height: `${height}px` };
   };
 
+  const backlogTasks = tasks.filter((task) => getTaskGroupKey(task.due) !== 'today');
   const groupedTasks: TaskGroup[] = taskGroupOrder
     .map((groupKey) => ({
       title: taskGroupLabels[groupKey],
-      tasks: tasks.filter((task) => getTaskGroupKey(task.due) === groupKey)
+      tasks: backlogTasks.filter((task) => getTaskGroupKey(task.due) === groupKey)
     }))
     .filter((group) => group.tasks.length > 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const todayTasks = tasks.filter((task) => getTaskGroupKey(task.due) === 'today');
+  const overdueTasks = tasks.filter((task) => {
+    if (!task.due) return false;
+    const dueDate = new Date(task.due);
+    return !Number.isNaN(dueDate.getTime()) && dueDate < today;
+  });
+  const nextEvents = events
+    .filter((event) => {
+      const start = getEventStartDate(event);
+      return start ? start >= today : false;
+    })
+    .sort((first, second) => {
+      const firstStart = getEventStartDate(first)?.getTime() || 0;
+      const secondStart = getEventStartDate(second)?.getTime() || 0;
+      return firstStart - secondStart;
+    })
+    .slice(0, 5);
+  const todayEvents = events.filter((event) => {
+    const start = getEventStartDate(event);
+    return start ? dateKey(start) === dateKey(today) : false;
+  });
+  const integrationConnectionStates = [
+    integrationStatus.todoist_connected,
+    integrationStatus.google_connected,
+    integrationStatus.telegram_connected
+  ];
+  const connectedIntegrations = integrationConnectionStates.filter(Boolean).length;
+  const totalIntegrations = integrationConnectionStates.length;
+  const hasPlanItems = todayTasks.length > 0 || todayEvents.length > 0 || overdueTasks.length > 0;
 
   const calendarDays: CalendarDay[] = Array.from({ length: 7 }, (_, index) => {
     const date = new Date();
@@ -430,77 +505,141 @@ function App() {
         </form>
       ) : (
         <>
-      <form onSubmit={handleSaveIntegrations} className="glass-panel integrations-panel">
-        <div>
-          <h2>Integrations</h2>
-          <div className="integration-status">
-            <span className={integrationStatus.todoist_connected ? 'connected' : ''}>Todoist</span>
-            <span className={integrationStatus.google_connected ? 'connected' : ''}>Google Calendar</span>
-            <span className={integrationStatus.telegram_connected ? 'connected' : ''}>Telegram Bot</span>
-          </div>
-        </div>
-        <input
-          type="password"
-          value={integrations.todoist_api_token}
-          onChange={(e) => setIntegrations({ ...integrations, todoist_api_token: e.target.value })}
-          placeholder="Todoist API token"
-        />
-        <textarea
-          value={integrations.google_token_json}
-          onChange={(e) => setIntegrations({ ...integrations, google_token_json: e.target.value })}
-          placeholder="Google Calendar token.json content"
-          rows={3}
-        />
-        <input
-          type="password"
-          value={integrations.telegram_bot_token}
-          onChange={(e) => setIntegrations({ ...integrations, telegram_bot_token: e.target.value })}
-          placeholder="Telegram bot token"
-        />
-        <button type="submit" className="btn-primary" disabled={savingIntegrations}>
-          {savingIntegrations ? 'Saving...' : 'Save integrations'}
-        </button>
-      </form>
-      
-      <form onSubmit={handleAddTask} className="glass-panel" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
-        <input 
-          type="text" 
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-          placeholder="What needs to be done today?" 
-          style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.8rem', color: 'white' }}
-        />
-        <button 
-          type="submit" 
-          disabled={submitting}
-          style={{ background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', border: 'none', borderRadius: '8px', padding: '0.8rem 1.5rem', color: 'white', fontWeight: 'bold', cursor: 'pointer', transition: 'transform 0.2s' }}
-        >
-          {submitting ? 'Adding...' : 'Add Task'}
-        </button>
-      </form>
-      
-      {loading ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem' }}>
-          <div style={{ animation: 'spin 1s linear infinite', fontSize: '2rem' }}>⏳</div>
-          <p style={{ marginTop: '1rem', color: '#9ca3af' }}>Syncing with Todoist & Google Calendar...</p>
-        </div>
-      ) : (
-        <div className="dashboard-grid">
-          {/* Todoist Tasks Panel */}
-          <section className="glass-panel">
-            <h2>🎯 Active Tasks</h2>
-            <div className="item-list">
-              {tasks.length === 0 ? (
-                <p style={{ color: '#9ca3af' }}>No active tasks found.</p>
-              ) : (
-                groupedTasks.map((group) => (
-                  <div key={group.title} className="task-group">
-                    <div className="task-group-header">
-                      <h3>{group.title}</h3>
-                      <span>{group.tasks.length}</span>
+          <section className="today-hero">
+            <div>
+              <span className="eyebrow">{formatFullDay(today)}</span>
+              <h2>Today</h2>
+              <p>
+                {loading
+                  ? 'Syncing with Todoist & Google Calendar...'
+                  : fetchError
+                    ? 'Your day plan needs a refresh.'
+                    : hasPlanItems
+                      ? `${todayTasks.length} tasks, ${todayEvents.length} events, ${overdueTasks.length} overdue`
+                      : 'Nothing is scheduled for today yet.'}
+              </p>
+            </div>
+            <div className="hero-metrics" aria-label="Today overview">
+              <div>
+                <strong>{todayTasks.length}</strong>
+                <span>Today tasks</span>
+              </div>
+              <div>
+                <strong>{todayEvents.length}</strong>
+                <span>Events</span>
+              </div>
+              <div className={overdueTasks.length > 0 ? 'attention' : ''}>
+                <strong>{overdueTasks.length}</strong>
+                <span>Overdue</span>
+              </div>
+            </div>
+          </section>
+
+          {fetchError && (
+            <div className="state-banner error-state">
+              <strong>Data did not load.</strong>
+              <span>{fetchError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAddTask} className="quick-add-panel">
+            <input
+              type="text"
+              value={newTask}
+              onChange={(e) => setNewTask(e.target.value)}
+              placeholder="What needs to be done today?"
+            />
+            <button type="submit" className="btn-primary" disabled={submitting}>
+              {submitting ? 'Adding...' : 'Add Task'}
+            </button>
+          </form>
+
+          {loading ? (
+            <div className="loading-grid">
+              <div className="skeleton-panel" />
+              <div className="skeleton-panel" />
+              <div className="skeleton-panel wide" />
+            </div>
+          ) : (
+            <>
+              <div className="dashboard-grid">
+                <section className="panel-primary">
+                  <div className="section-header">
+                    <div>
+                      <span className="eyebrow">Focus</span>
+                      <h2>Today tasks</h2>
                     </div>
-                    <div className="task-group-list">
-                      {group.tasks.map(task => (
+                    <span className="count-pill">{todayTasks.length}</span>
+                  </div>
+                  <div className="item-list">
+                    {todayTasks.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>No tasks due today.</strong>
+                        <span>Add a task above or sync Todoist to build your plan.</span>
+                      </div>
+                    ) : (
+                      todayTasks.map((task) => (
+                        <div key={task.id} className={`item-card priority-${task.priority}`}>
+                          <div className="item-title">{task.content}</div>
+                          <div className="item-meta">
+                            <span>Priority: P{5 - task.priority}</span>
+                            {task.due && <span>Due: {task.due}</span>}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                <section className="panel-primary">
+                  <div className="section-header">
+                    <div>
+                      <span className="eyebrow">Schedule</span>
+                      <h2>Upcoming events</h2>
+                    </div>
+                    <span className="count-pill">{nextEvents.length}</span>
+                  </div>
+                  <div className="item-list">
+                    {nextEvents.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>No upcoming events.</strong>
+                        <span>Connect Google Calendar or add calendar items to see your day here.</span>
+                      </div>
+                    ) : (
+                      nextEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className="event-row"
+                          aria-label={`${event.summary || 'Untitled event'} at ${formatTime(event.start?.dateTime || event.start?.date)}`}
+                        >
+                          <span>{formatTime(event.start?.dateTime || event.start?.date)}</span>
+                          <strong>Calendar event</strong>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </div>
+
+              <div className="dashboard-grid secondary-grid">
+                <section className="panel-secondary">
+                  <div className="section-header">
+                    <div>
+                      <span className="eyebrow">Carryover</span>
+                      <h2>Overdue tasks</h2>
+                    </div>
+                    <span className={overdueTasks.length > 0 ? 'count-pill danger' : 'count-pill'}>
+                      {overdueTasks.length}
+                    </span>
+                  </div>
+                  {overdueTasks.length === 0 ? (
+                    <div className="empty-state compact">
+                      <strong>No overdue work.</strong>
+                      <span>Nothing is blocking today from previous dates.</span>
+                    </div>
+                  ) : (
+                    <div className="item-list">
+                      {overdueTasks.map((task) => (
                         <div key={task.id} className={`item-card priority-${task.priority}`}>
                           <div className="item-title">{task.content}</div>
                           <div className="item-meta">
@@ -510,52 +649,149 @@ function App() {
                         </div>
                       ))}
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
+                  )}
+                </section>
 
-          {/* Google Calendar Panel */}
-          <section className="glass-panel">
-            <h2>📅 Upcoming Events</h2>
-            <div className="calendar-grid">
-              {events.length === 0 ? (
-                <p style={{ color: '#9ca3af' }}>No upcoming events found.</p>
-              ) : (
-                calendarDays.map((day) => (
-                  <div key={dateKey(day.date)} className="calendar-day">
-                    <div className="calendar-day-header">
-                      <span>{formatDayName(day.date)}</span>
-                      <strong>{formatDayNumber(day.date)}</strong>
+                <form onSubmit={handleSaveIntegrations} className="panel-secondary integrations-panel">
+                  <div className="section-header">
+                    <div>
+                      <span className="eyebrow">Connections</span>
+                      <h2>Integrations</h2>
                     </div>
-                    <div className="calendar-timeline">
-                      {timelineHours.map((hour) => (
-                        <div key={hour} className="timeline-hour">
-                          <span>{String(hour).padStart(2, '0')}:00</span>
-                        </div>
-                      ))}
-                      {day.events.length === 0 && <span className="calendar-empty">No events</span>}
-                      {day.events.map((event) => (
-                        <button
-                          key={event.id}
-                          type="button"
-                          className="calendar-event-block"
-                          style={getEventBlockStyle(event)}
-                          onClick={() => openEventEditor(event)}
-                        >
-                          <span>{formatTime(event.start?.dateTime || event.start?.date)}</span>
-                          <strong>{event.summary || '(No title)'}</strong>
-                        </button>
-                      ))}
-                    </div>
+                    <span className="count-pill">{connectedIntegrations}/{totalIntegrations}</span>
                   </div>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-      )}
+                  {connectedIntegrations === 0 && (
+                    <div className="empty-state compact">
+                      <strong>No integrations connected.</strong>
+                      <span>Add tokens below to sync tasks, events, and notifications.</span>
+                    </div>
+                  )}
+                  <div className="integration-status">
+                    <span className={integrationStatus.todoist_connected ? 'connected' : ''}>Todoist</span>
+                    <span className={integrationStatus.google_connected ? 'connected' : ''}>Google Calendar</span>
+                    <span className={integrationStatus.telegram_connected ? 'connected' : ''}>Telegram Bot</span>
+                  </div>
+                  <input
+                    type="password"
+                    value={integrations.todoist_api_token}
+                    onChange={(e) => setIntegrations({ ...integrations, todoist_api_token: e.target.value })}
+                    placeholder="Todoist API token"
+                  />
+                  <textarea
+                    value={integrations.google_token_json}
+                    onChange={(e) => setIntegrations({ ...integrations, google_token_json: e.target.value })}
+                    placeholder="Google Calendar token.json content"
+                    rows={3}
+                  />
+                  <input
+                    type="password"
+                    value={telegramLinkCommand}
+                    readOnly
+                    placeholder="Generate a Telegram link command"
+                  />
+                  {telegramLinkExpiresAt && (
+                    <span className="integration-help">
+                      Send this command to the system bot before {new Date(telegramLinkExpiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+                    </span>
+                  )}
+                  {integrationStatus.telegram_username && (
+                    <span className="integration-help">Linked to {integrationStatus.telegram_username}</span>
+                  )}
+                  <button type="button" className="btn-secondary" onClick={handleCreateTelegramLink} disabled={creatingTelegramLink}>
+                    {creatingTelegramLink ? 'Creating link...' : 'Create Telegram link'}
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={savingIntegrations}>
+                    {savingIntegrations ? 'Saving...' : 'Save integrations'}
+                  </button>
+                </form>
+              </div>
+
+              <section className="panel-secondary">
+                <div className="section-header">
+                  <div>
+                    <span className="eyebrow">Backlog</span>
+                    <h2>Active Tasks</h2>
+                  </div>
+                  <span className="count-pill">{backlogTasks.length}</span>
+                </div>
+                <div className="item-list">
+                  {backlogTasks.length === 0 ? (
+                    <div className="empty-state">
+                      <strong>No later tasks found.</strong>
+                      <span>Tomorrow, upcoming, and unscheduled tasks will appear here.</span>
+                    </div>
+                  ) : (
+                    groupedTasks.map((group) => (
+                      <div key={group.title} className="task-group">
+                        <div className="task-group-header">
+                          <h3>{group.title}</h3>
+                          <span>{group.tasks.length}</span>
+                        </div>
+                        <div className="task-group-list">
+                          {group.tasks.map((task) => (
+                            <div key={task.id} className={`item-card priority-${task.priority}`}>
+                              <div className="item-title">{task.content}</div>
+                              <div className="item-meta">
+                                <span>Priority: P{5 - task.priority}</span>
+                                {task.due && <span>Due: {task.due}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <section className="panel-secondary">
+                <div className="section-header">
+                  <div>
+                    <span className="eyebrow">Calendar</span>
+                    <h2>Week timeline</h2>
+                  </div>
+                  <span className="count-pill">{events.length}</span>
+                </div>
+                {events.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>No calendar events found.</strong>
+                    <span>Connect Google Calendar to see meetings and time blocks alongside your tasks.</span>
+                  </div>
+                ) : (
+                  <div className="calendar-grid">
+                    {calendarDays.map((day) => (
+                      <div key={dateKey(day.date)} className="calendar-day">
+                        <div className="calendar-day-header">
+                          <span>{formatDayName(day.date)}</span>
+                          <strong>{formatDayNumber(day.date)}</strong>
+                        </div>
+                        <div className="calendar-timeline">
+                          {timelineHours.map((hour) => (
+                            <div key={hour} className="timeline-hour">
+                              <span>{String(hour).padStart(2, '0')}:00</span>
+                            </div>
+                          ))}
+                          {day.events.length === 0 && <span className="calendar-empty">No events</span>}
+                          {day.events.map((event) => (
+                            <button
+                              key={event.id}
+                              type="button"
+                              className="calendar-event-block"
+                              style={getEventBlockStyle(event)}
+                              onClick={() => openEventEditor(event)}
+                            >
+                              <span>{formatTime(event.start?.dateTime || event.start?.date)}</span>
+                              <strong>{event.summary || '(No title)'}</strong>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
 
       {editingEvent && (
         <div className="modal-backdrop" role="presentation">
@@ -600,10 +836,6 @@ function App() {
           </form>
         </div>
       )}
-      
-      <style>{`
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-      `}</style>
         </>
       )}
     </div>
