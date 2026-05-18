@@ -229,8 +229,8 @@ jobs:
             retry 5 15 sh -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin'
             export BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
             export FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
-            retry 5 20 docker-compose pull api bot frontend
-            docker-compose up -d --no-build
+            retry 5 20 docker compose pull api bot frontend
+            docker compose up -d --no-build
           envs: GHCR_TOKEN,GHCR_USERNAME,GITHUB_TOKEN,TELEGRAM_BOT_TOKEN,GEMINI_API_KEY,AUTH_SECRET_KEY
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
