@@ -168,12 +168,30 @@ jobs:
           port: ${{ secrets.SERVER_PORT || '22' }}
           script: |
             set -e
+            retry() {
+              local attempts="$1"
+              local delay="$2"
+              shift 2
+              local n=1
+              until "$@"; do
+                if [ "$n" -ge "$attempts" ]; then
+                  return 1
+                fi
+                echo "Command failed. Retrying in ${delay}s (${n}/${attempts})..."
+                sleep "$delay"
+                n=$((n + 1))
+              done
+            }
             mkdir -p ~/ai_task_manager
             cd ~/ai_task_manager
             git fetch origin ${{ github.ref_name }}
             git reset --hard origin/${{ github.ref_name }}
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+            retry 5 15 sh -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin'
             export BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
             export FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
-            docker compose -f docker-compose.yml pull api bot frontend
+            retry 5 20 docker compose -f docker-compose.yml pull api bot frontend
             docker compose -f docker-compose.yml up -d --no-build
+          envs: GHCR_TOKEN,GHCR_USERNAME
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
