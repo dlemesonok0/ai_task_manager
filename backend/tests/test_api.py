@@ -2,7 +2,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 async def auth_headers(client):
-    response = await client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    await client.post("/api/auth/register", json={"username": "testuser", "password": "testpass1234"})
+    response = await client.post("/api/auth/login", json={"username": "testuser", "password": "testpass1234"})
     assert response.status_code == 200
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -15,7 +16,7 @@ async def test_read_root(client):
 
 @pytest.mark.asyncio
 async def test_login_rejects_invalid_credentials(client):
-    response = await client.post("/api/auth/login", json={"username": "admin", "password": "wrong"})
+    response = await client.post("/api/auth/login", json={"username": "nonexistent", "password": "wrong"})
     assert response.status_code == 401
 
 @pytest.mark.asyncio

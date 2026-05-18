@@ -125,66 +125,25 @@ def test_gcal_no_service():
         assert service.create_event("test", None, None) is None
         assert service.update_event("event1", "primary", "test", None, None) is None
 
-def test_authenticate_existing_token():
-    with patch('os.path.exists', return_value=True):
-        with patch('services.gcal_service.Credentials') as mock_creds:
-            service = GoogleCalendarService()
-            service._authenticate()
-            mock_creds.from_authorized_user_file.assert_called()
-
-def test_authenticate_refresh_token():
-    with patch('os.path.exists', return_value=True):
-        with patch('services.gcal_service.Credentials') as mock_creds, \
-             patch('services.gcal_service.Request') as mock_request:
-            creds = mock_creds.from_authorized_user_file.return_value
-            creds.valid = False
-            creds.expired = True
-            creds.refresh_token = "refresh"
-            creds.to_json.return_value = '{"token": "fake"}'
-            
-            service = GoogleCalendarService()
-            with patch('builtins.open', MagicMock()):
-                service._authenticate()
-                creds.refresh.assert_called_with(mock_request.return_value)
-
-def test_authenticate_refresh_error():
-    with patch('os.path.exists', return_value=True):
-        with patch('services.gcal_service.Credentials') as mock_creds:
-            creds = mock_creds.from_authorized_user_file.return_value
-            creds.valid = False
-            creds.expired = True
-            creds.refresh_token = "refresh"
-            creds.refresh.side_effect = Exception("Refresh failed")
-            
-            service = GoogleCalendarService()
-            service._authenticate()
-            assert service.creds is None
-
-def test_authenticate_new_flow():
-    with patch('os.path.exists') as mock_exists:
-        mock_exists.side_effect = lambda x: x.endswith('credentials.json')
-        with patch('services.gcal_service.InstalledAppFlow') as mock_flow:
-            flow = mock_flow.from_client_secrets_file.return_value
-            flow.run_local_server.return_value = MagicMock()
-            
-            service = GoogleCalendarService()
-            with patch('builtins.open', MagicMock()):
-                service._authenticate()
-                flow.run_local_server.assert_called()
-
-def test_authenticate_new_flow_error():
-    with patch('os.path.exists') as mock_exists:
-        mock_exists.side_effect = lambda x: x.endswith('credentials.json')
-        with patch('services.gcal_service.InstalledAppFlow') as mock_flow:
-            flow = mock_flow.from_client_secrets_file.return_value
-            flow.run_local_server.side_effect = Exception("Flow failed")
-            
-            service = GoogleCalendarService()
-            service._authenticate()
-            assert service.creds is None
-
-def test_authenticate_no_creds_file():
-    with patch('os.path.exists', return_value=False):
-        service = GoogleCalendarService()
+def test_authenticate_with_token_json():
+    with patch('services.gcal_service.Credentials') as mock_creds:
+        service = GoogleCalendarService(token_json='{"token": "fake"}')
         service._authenticate()
-        assert service.creds is None
+        mock_creds.from_authorized_user_info.assert_called_once()
+
+def test_authenticate_token_refresh():
+    with patch('services.gcal_service.Credentials') as mock_creds, \
+         patch('services.gcal_service.Request') as mock_request:
+        creds = mock_creds.from_authorized_user_info.return_value
+        creds.valid = False
+        creds.expired = True
+        creds.refresh_token = "refresh"
+
+        service = GoogleCalendarService(token_json='{"token": "fake"}')
+        service._authenticate()
+        creds.refresh.assert_called_with(mock_request.return_value)
+
+def test_authenticate_no_token():
+    service = GoogleCalendarService()
+    service._authenticate()
+    assert service.creds is None

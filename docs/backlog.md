@@ -496,10 +496,10 @@
 Сложность: S
 
 Границы реализации:
-- Убрать безопасностно опасные production defaults.
+- ~~Убрать безопасностно опасные production defaults.~~ (Done — глобальные `admin/admin` удалены)
 - Требовать явный `AUTH_SECRET_KEY`.
 - Ограничить CORS через allowlist из env.
-- Явно задокументировать dev-only режим `admin/admin`.
+- ~~Явно задокументировать dev-only режим `admin/admin`.~~ (Неактуально)
 
 Основные файлы:
 - `backend/services/auth_service.py`
@@ -513,7 +513,6 @@
 Критерии приемки:
 - При production-настройке без `AUTH_SECRET_KEY` приложение не стартует или явно сообщает ошибку.
 - CORS origins берутся из env.
-- Dev fallback логически отделен от production.
 - Тесты покрывают auth secret и CORS configuration, если это возможно без хрупкости.
 
 ### OPS-003: Шифрование секретов интеграций
