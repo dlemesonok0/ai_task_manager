@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: write
+  pull-requests: read
 
 env:
   BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/ai_task_manager-backend
@@ -35,10 +36,32 @@ jobs:
             exit 1
           fi
 
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            yaml:
+              - '**/*.yml'
+              - '**/*.yaml'
+      - uses: actions/setup-python@v5
+        if: steps.filter.outputs.yaml == 'true'
+        with:
+          python-version: '3.x'
+      - run: pip install yamllint
+        if: steps.filter.outputs.yaml == 'true'
+      - run: yamllint .github/workflows/
+        if: steps.filter.outputs.yaml == 'true'
+
   backend-tests:
     name: Backend Tests
     needs:
       - reject-direct-push
+      - yaml-lint
     if: always() && (needs.reject-direct-push.result == 'success' || needs.reject-direct-push.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
@@ -192,16 +215,16 @@ jobs:
             # Write secrets into .env
             mkdir -p backend
             cat > backend/.env <<ENVEOF
-TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-GEMINI_API_KEY=${GEMINI_API_KEY}
-AUTH_SECRET_KEY=${AUTH_SECRET_KEY}
-AUTH_TOKEN_TTL_SECONDS=86400
-LOG_DIR=logs
-LOG_FILE_NAME=app.log
-LOG_LEVEL=INFO
-LOG_MAX_BYTES=5242880
-LOG_BACKUP_COUNT=5
-ENVEOF
+            TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+            GEMINI_API_KEY=${GEMINI_API_KEY}
+            AUTH_SECRET_KEY=${AUTH_SECRET_KEY}
+            AUTH_TOKEN_TTL_SECONDS=86400
+            LOG_DIR=logs
+            LOG_FILE_NAME=app.log
+            LOG_LEVEL=INFO
+            LOG_MAX_BYTES=5242880
+            LOG_BACKUP_COUNT=5
+            ENVEOF
 
             retry 5 15 sh -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin'
             export BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
