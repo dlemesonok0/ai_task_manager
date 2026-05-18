@@ -1,15 +1,18 @@
 services:
   api:
+    image:
     build:
       context: ./backend
       dockerfile: Dockerfile
 
   bot:
+    image:
     build:
       context: ./backend
       dockerfile: Dockerfile
 
   frontend:
+    image:
     build:
       context: ./frontend
       dockerfile: Dockerfile

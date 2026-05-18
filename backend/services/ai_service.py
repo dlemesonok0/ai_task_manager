@@ -11,30 +11,34 @@ class AIService:
     def __init__(self):
         # Determine which provider to use based on env variables
         if os.getenv("GEMINI_API_KEY"):
-            # Using Gemini via OpenAI SDK compatibility (Gemini 1.5 Pro/Flash)
+            # Using Gemini via OpenAI SDK compatibility
             self.client = AsyncOpenAI(
                 api_key=os.getenv("GEMINI_API_KEY"),
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
             )
-            self.model = "gemini-1.5-flash" # Default fast model
+            self.model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+            self.provider = "gemini"
             logger.info("AI Service initialized with Google Gemini")
-            
+
         elif os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_API_KEY") != "your_openai_api_key_here":
             self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             self.model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+            self.provider = "openai"
             logger.info("AI Service initialized with OpenAI")
-            
+
         elif os.getenv("LLM_BASE_URL"):
             # Using a local model (e.g. Ollama)
             self.client = AsyncOpenAI(
-                api_key="ollama", # dummy key
+                api_key="ollama",
                 base_url=os.getenv("LLM_BASE_URL")
             )
             self.model = os.getenv("LLM_MODEL", "llama3")
+            self.provider = "local"
             logger.info("AI Service initialized with local model", extra={"_extra": {"model": self.model}})
         else:
             self.client = None
             self.model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+            self.provider = None
             logger.warning("No LLM configuration found. AI features will be disabled")
 
     async def parse_task_nlp(self, text: str) -> dict:
@@ -76,5 +80,23 @@ class AIService:
         except Exception:
             logger.exception("Error parsing NLP task")
             return {"content": text, "due_string": "today", "priority": 1}
+
+    async def health_check(self) -> dict:
+        if not self.client:
+            return {"status": "disabled"}
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "Respond with the word ok."},
+                    {"role": "user", "content": "Say ok"},
+                ],
+                max_tokens=1,
+                temperature=0.0,
+            )
+            return {"status": "ok", "provider": self.provider, "model": self.model}
+        except Exception as e:
+            return {"status": "degraded", "provider": self.provider, "model": self.model, "error": str(e)}
 
 ai_service = AIService()

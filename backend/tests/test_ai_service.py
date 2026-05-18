@@ -67,7 +67,7 @@ def test_ai_service_init_gemini():
     with patch.dict('os.environ', {'GEMINI_API_KEY': 'some_key'}):
         with patch('services.ai_service.AsyncOpenAI') as mock_openai:
             service = AIService()
-            assert service.model == "gemini-1.5-flash"
+            assert service.model == "gemini-2.0-flash"
 
 def test_ai_service_init_openai():
     with patch.dict('os.environ', {'GEMINI_API_KEY': '', 'OPENAI_API_KEY': 'sk-test'}):

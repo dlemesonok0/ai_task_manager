@@ -112,6 +112,12 @@ describe('App Component', () => {
 
     fireEvent.change(screen.getByPlaceholderText(/Todoist API token/i), { target: { value: 'todoist-token' } });
     fireEvent.change(screen.getByPlaceholderText(/Google Calendar token/i), { target: { value: '{"token":"google"}' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create Telegram link/i }));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('/link ABCD1234')).toBeInTheDocument();
+    });
+
     fireEvent.click(screen.getByRole('button', { name: /Save integrations/i }));
 
     await waitFor(() => {
@@ -120,12 +126,6 @@ describe('App Component', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
         body: expect.stringContaining('todoist-token')
       }));
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Create Telegram link/i }));
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('/link ABCD1234')).toBeInTheDocument();
     });
   });
 

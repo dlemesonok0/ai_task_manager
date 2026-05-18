@@ -167,3 +167,31 @@ async def test_create_telegram_link_code(client):
     data = response.json()
     assert data["code"] == "ABCD1234"
     assert data["command"] == "/link ABCD1234"
+
+@pytest.mark.asyncio
+async def test_ai_health_disabled(client):
+    mock_hc = AsyncMock(return_value={"status": "disabled"})
+    with patch("main.ai_service.health_check", mock_hc):
+        response = await client.get("/api/health/ai")
+    assert response.status_code == 200
+    assert response.json() == {"status": "disabled"}
+
+@pytest.mark.asyncio
+async def test_ai_health_ok(client):
+    mock_hc = AsyncMock(return_value={"status": "ok", "provider": "gemini", "model": "gemini-2.0-flash"})
+    with patch("main.ai_service.health_check", mock_hc):
+        response = await client.get("/api/health/ai")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["provider"] == "gemini"
+
+@pytest.mark.asyncio
+async def test_ai_health_degraded(client):
+    mock_hc = AsyncMock(return_value={"status": "degraded", "provider": "gemini", "model": "gemini-1.5-flash", "error": "API key not valid"})
+    with patch("main.ai_service.health_check", mock_hc):
+        response = await client.get("/api/health/ai")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert "error" in data

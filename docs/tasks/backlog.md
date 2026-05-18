@@ -4,6 +4,25 @@
 
 ## P1
 
+### Нормальный вывод ошибок при регистрации
+
+Цель: вместо заглушек показывать пользователю понятные сообщения об ошибках из API.
+
+Объем работ:
+- **Frontend**: в `handleLogin` парсить тело ответа при `!res.ok`, извлекать `detail` и показывать его в `authError`. Сейчас ошибка всегда `'Could not create account'`.
+- **Backend**: проверить, что все `HTTPException` в `register` и `login` возвращают осмысленный `detail` (уже есть — `"Username must be at least 3 characters"`, `"Password must be at least 8 characters"`, `"Username is already registered"`).
+
+Основные файлы:
+- `frontend/src/App.tsx` (handleLogin, ~строка 200)
+- `backend/main.py` (register/login endpoints)
+- `backend/services/auth_service.py` (register_user)
+
+Критерии приемки:
+- При попытке зарегистрироваться с существующим username показывается `"Username is already registered"`.
+- При коротком пароле показывается `"Password must be at least 8 characters"`.
+- При коротком username показывается `"Username must be at least 3 characters"`.
+- Ошибки логина тоже показывают detail из API.
+
 ### AI-парсинг задач
 
 Цель: превращать естественный язык в структурированные задачи.
@@ -109,6 +128,23 @@
 - Все проверки (lint, typecheck, тесты, сборка) проходят в PR.
 - Deploy происходит только после мержа прошедшего все проверки PR.
 - Процесс описан в CONTRIBUTING.md или AGENTS.md.
+
+### Ускорение воркфлоу проекта
+
+Цель: сократить время цикла разработки — от коммита до прогона тестов и деплоя.
+
+Объем работ:
+- Добавить кеширование зависимостей (uv cache, npm cache) в CI.
+- Распараллелить backend и frontend тесты (сейчас идут последовательно).
+- Ускорить сборку Docker-образов через BuildKit cache (gha cache уже есть, проверить).
+- Заменить `pip install` в Dockerfile на `uv sync --no-dev` (быстрее и детерминированнее).
+- Добавить `--changed-only` или фильтрацию тестов по затронутым файлам.
+- Настроить GitHub Actions на запуск только релевантных джоб (backend/frontend) по изменённым путям.
+
+Критерии приемки:
+- Полный пайплайн (lint, typecheck, тесты, сборка) выполняется быстрее X минут (замерить до/после).
+- Кеш зависимостей восстанавливается между запусками.
+- Ни одна проверка не выпала — coverage и качество не пострадали.
 
 ## P2
 
