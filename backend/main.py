@@ -11,6 +11,7 @@ from services.gcal_service import gcal_service_for_token
 from services.auth_service import authenticate_user_record, create_access_token, register_user, require_auth
 from services import db_service
 from services.logging_service import bind_extra, configure_logging, log_path, monotonic_ms, read_recent_logs
+from services.ai_service import ai_service
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -326,3 +327,7 @@ def update_event(event_id: str, event_data: CalendarEventUpdate, auth_payload: d
 @app.get("/", tags=["Health"])
 def read_root():
     return {"status": "ok", "message": "AI Task Manager API is running"}
+
+@app.get("/api/health/ai", tags=["Health"])
+async def ai_health():
+    return await ai_service.health_check()

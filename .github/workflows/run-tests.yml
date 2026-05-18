@@ -182,7 +182,9 @@ jobs:
                 n=$((n + 1))
               done
             }
-            mkdir -p ~/ai_task_manager
+            if [ ! -d ~/ai_task_manager/.git ]; then
+              git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git ~/ai_task_manager
+            fi
             cd ~/ai_task_manager
             git fetch origin ${{ github.ref_name }}
             git reset --hard origin/${{ github.ref_name }}
@@ -191,7 +193,8 @@ jobs:
             export FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
             retry 5 20 docker compose -f docker-compose.yml pull api bot frontend
             docker compose -f docker-compose.yml up -d --no-build
-          envs: GHCR_TOKEN,GHCR_USERNAME
+          envs: GHCR_TOKEN,GHCR_USERNAME,GITHUB_TOKEN
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

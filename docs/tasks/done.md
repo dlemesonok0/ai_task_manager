@@ -76,6 +76,25 @@
 Заметки:
 - Backlog детализирует `docs/roadmap.md` и может использоваться для постановки следующих задач после `TASK-004`-`TASK-007`.
 
+### Проверка работоспособности Gemini API
+
+Завершено: 2026-05-18
+
+Краткое описание:
+- Добавлен метод `health_check` в `AIService` (ai_service.py). Возвращает `status: "disabled"` если AI не сконфигурирован, `status: "ok"` при успешном минимальном запросе, `status: "degraded"` с текстом ошибки при сбое.
+- Добавлен endpoint `GET /api/health/ai` без аутентификации.
+- Добавлен атрибут `provider` в AIService (gemini/openai/local).
+- Результат содержит `provider` и `model` для диагностики.
+
+Затронутые файлы:
+- `backend/services/ai_service.py`
+- `backend/main.py`
+- `backend/tests/test_api.py`
+- `docs/tasks/backlog.md`
+
+Проверки:
+- `uv run pytest` — 69/69 passed
+
 ### TASK-004: Today Dashboard
 
 Завершено: 2026-05-17

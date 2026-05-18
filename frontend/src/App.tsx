@@ -683,23 +683,28 @@ function App() {
                     placeholder="Google Calendar token.json content"
                     rows={3}
                   />
-                  <input
-                    type="password"
-                    value={telegramLinkCommand}
-                    readOnly
-                    placeholder="Generate a Telegram link command"
-                  />
-                  {telegramLinkExpiresAt && (
-                    <span className="integration-help">
-                      Send this command to the system bot before {new Date(telegramLinkExpiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
-                    </span>
-                  )}
-                  {integrationStatus.telegram_username && (
+                  {integrationStatus.telegram_connected ? (
                     <span className="integration-help">Linked to {integrationStatus.telegram_username}</span>
+                  ) : (
+                    <>
+                      {telegramLinkCommand && (
+                        <input
+                          type="text"
+                          value={telegramLinkCommand}
+                          readOnly
+                          placeholder="Generate a Telegram link command"
+                        />
+                      )}
+                      {telegramLinkExpiresAt && (
+                        <span className="integration-help">
+                          Send this command to the system bot before {new Date(telegramLinkExpiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+                        </span>
+                      )}
+                      <button type="button" className="btn-secondary" onClick={handleCreateTelegramLink} disabled={creatingTelegramLink}>
+                        {creatingTelegramLink ? 'Creating link...' : 'Create Telegram link'}
+                      </button>
+                    </>
                   )}
-                  <button type="button" className="btn-secondary" onClick={handleCreateTelegramLink} disabled={creatingTelegramLink}>
-                    {creatingTelegramLink ? 'Creating link...' : 'Create Telegram link'}
-                  </button>
                   <button type="submit" className="btn-primary" disabled={savingIntegrations}>
                     {savingIntegrations ? 'Saving...' : 'Save integrations'}
                   </button>
