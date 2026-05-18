@@ -1,19 +1,15 @@
 import logging
-import os
 from typing import List, Optional
 from todoist_api_python.api_async import TodoistAPIAsync
 from todoist_api_python.models import Task
-from dotenv import load_dotenv
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 class TodoistService:
     def __init__(self, token: str | None = None):
-        token = token if token is not None else os.getenv("TODOIST_API_TOKEN")
-        if not token or token == "your_todoist_token_here":
+        if not token:
             self.api = None
-            logger.warning("TODOIST_API_TOKEN is not set")
+            logger.warning("Todoist token is not provided")
         else:
             self.api = TodoistAPIAsync(token)
 

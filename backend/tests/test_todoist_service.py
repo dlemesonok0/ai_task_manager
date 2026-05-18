@@ -92,13 +92,9 @@ async def test_close_task_error(todoist_service):
     assert result is False
 
 def test_todoist_service_no_token():
-    with patch.dict('os.environ', {'TODOIST_API_TOKEN': ''}):
-        with patch('services.todoist_service.TodoistAPIAsync') as mock_api:
-            # Re-import or re-init might be tricky because of singleton, 
-            # let's just test the class logic
-            from services.todoist_service import TodoistService
-            service = TodoistService()
-            assert service.api is None
+    from services.todoist_service import TodoistService
+    service = TodoistService()
+    assert service.api is None
 
 @pytest.mark.asyncio
 async def test_methods_no_api():

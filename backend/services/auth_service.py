@@ -17,15 +17,7 @@ security = HTTPBearer(auto_error=False)
 
 
 def _secret_key() -> str:
-    return os.getenv("AUTH_SECRET_KEY") or os.getenv("SECRET_KEY") or "dev-only-auth-secret"
-
-
-def _expected_username() -> str:
-    return os.getenv("AUTH_USERNAME", "admin")
-
-
-def _expected_password() -> str:
-    return os.getenv("AUTH_PASSWORD", "admin")
+    return os.getenv("AUTH_SECRET_KEY") or "dev-only-auth-secret"
 
 
 def _token_ttl_seconds() -> int:
@@ -99,20 +91,13 @@ def authenticate_user(username: str, password: str) -> bool:
     user = db_service.get_user_by_username(username)
     if user:
         return verify_password(password, user["password_hash"])
-    return hmac.compare_digest(username, _expected_username()) and hmac.compare_digest(password, _expected_password())
+    return False
 
 
 def authenticate_user_record(username: str, password: str) -> dict[str, Any] | None:
     user = db_service.get_user_by_username(username)
     if user and verify_password(password, user["password_hash"]):
         return {"id": user["id"], "username": user["username"]}
-
-    if hmac.compare_digest(username, _expected_username()) and hmac.compare_digest(password, _expected_password()):
-        existing = db_service.get_user_by_username(username)
-        if existing:
-            return {"id": existing["id"], "username": existing["username"]}
-        return db_service.create_user(username, hash_password(password))
-
     return None
 
 

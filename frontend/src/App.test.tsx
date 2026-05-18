@@ -46,7 +46,7 @@ describe('App Component', () => {
 
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText(/Username/i), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText(/Username/i), { target: { value: 'testuser' } });
     fireEvent.change(screen.getByLabelText(/Password/i), { target: { value: 'secret' } });
     fireEvent.click(screen.getAllByRole('button', { name: /^Sign in$/i }).at(-1)!);
 

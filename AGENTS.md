@@ -33,7 +33,7 @@
 ## Особенности
 
 - **База**: PostgreSQL через docker-compose на порту 15432. Таблицы создаются в `init_db()` при старте FastAPI.
-- **Аутентификация**: кастомный JWT (HMAC). Dev-креды: `admin`/`admin`.
+- **Аутентификация**: кастомный JWT (HMAC). Регистрация и вход через БД.
 - **AI-сервис** (`backend/services/ai_service.py`): провайдер определяется по env-переменным (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `LLM_BASE_URL`). Для парсинга задач из текста (Telegram).
 - **Переменные окружения**: все в `backend/.env`, пример в `.env.example`. Токены (Todoist, Google, Telegram) — персональные, хранятся в БД для каждого пользователя.
 - **Docker**: образы публикуются в GHCR, деплой на сервер через SSH после мержа в master (CI).

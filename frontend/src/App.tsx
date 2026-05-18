@@ -90,7 +90,7 @@ function App() {
   const [editingEvent, setEditingEvent] = useState<EventEditorState | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(authTokenStorageKey) || '');
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [authenticating, setAuthenticating] = useState(false);

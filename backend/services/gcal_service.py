@@ -1,25 +1,19 @@
 import logging
-import os
 import datetime
 import json
 from typing import List, Dict, Any, Optional
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from dotenv import load_dotenv
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
-# If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 class GoogleCalendarService:
     def __init__(self, token_json: str | None = None):
         self.creds = None
         self._service = None
-        self.credentials_file = os.getenv("GOOGLE_CALENDAR_CREDENTIALS_FILE", "credentials.json")
         self.token_json = token_json
 
     @property
@@ -29,48 +23,23 @@ class GoogleCalendarService:
         return self._service
 
     def _authenticate(self):
-        """Authenticate with Google Calendar API using OAuth2."""
-        token_path = os.path.join(os.path.dirname(__file__), '..', 'token.json')
-        creds_path = os.path.join(os.path.dirname(__file__), '..', self.credentials_file)
-
         if self.token_json:
             try:
                 self.creds = Credentials.from_authorized_user_info(json.loads(self.token_json), SCOPES)
             except Exception:
-                logger.exception("Error loading user Google token JSON. Token may be empty or invalid")
+                logger.exception("Error loading user Google token JSON")
                 self.creds = None
-        elif os.path.exists(token_path):
-            try:
-                self.creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-            except Exception:
-                logger.exception("Error loading token.json. Token may be empty or invalid")
-                self.creds = None
-        
-        # If there are no (valid) credentials available, let the user log in.
-        # We handle the case where credentials.json might not exist yet to avoid crashing the server.
-        if not self.creds or not self.creds.valid:
-            if self.creds and self.creds.expired and self.creds.refresh_token:
+
+        if self.creds and not self.creds.valid:
+            if self.creds.expired and self.creds.refresh_token:
                 try:
                     self.creds.refresh(Request())
                 except Exception:
                     logger.exception("Error refreshing Google Calendar token")
                     self.creds = None
-            elif os.path.exists(creds_path):
-                try:
-                    flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-                    # This will open a browser window for authentication if running locally
-                    self.creds = flow.run_local_server(port=0)
-                except Exception:
-                    logger.exception("Error initializing Google Calendar OAuth flow")
-                    self.creds = None
             else:
-                logger.warning("Google Calendar credentials file is missing. Calendar sync is disabled", extra={"_extra": {"credentials_file": self.credentials_file}})
-                return
-
-            if self.creds and not self.token_json:
-                # Save the credentials for the next run
-                with open(token_path, 'w') as token:
-                    token.write(self.creds.to_json())
+                logger.warning("Google Calendar token is invalid and cannot be refreshed")
+                self.creds = None
 
         if self.creds:
             try:
