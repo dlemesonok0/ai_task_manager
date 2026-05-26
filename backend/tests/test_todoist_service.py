@@ -96,6 +96,21 @@ def test_todoist_service_no_token():
     service = TodoistService()
     assert service.api is None
 
+
+def test_todoist_service_with_token():
+    with patch('services.todoist_service.TodoistAPIAsync') as mock_api:
+        service = TodoistService(token="test_token")
+        mock_api.assert_called_once_with("test_token")
+        assert service.api is not None
+
+
+def test_todoist_service_for_token():
+    from services.todoist_service import todoist_service_for_token
+    with patch('services.todoist_service.TodoistAPIAsync'):
+        service = todoist_service_for_token("some_token")
+        assert isinstance(service, TodoistService)
+        assert service.api is not None
+
 @pytest.mark.asyncio
 async def test_methods_no_api():
     service = TodoistService()

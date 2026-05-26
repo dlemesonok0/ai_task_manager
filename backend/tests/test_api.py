@@ -196,3 +196,241 @@ async def test_ai_health_degraded(client):
     data = response.json()
     assert data["status"] == "degraded"
     assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_register_short_username(client):
+    response = await client.post("/api/auth/register", json={"username": "ab", "password": "password1234"})
+    assert response.status_code == 400
+    assert "3 characters" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_register_short_password(client):
+    response = await client.post("/api/auth/register", json={"username": "testuser2", "password": "short"})
+    assert response.status_code == 400
+    assert "8 characters" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_read_current_user(client):
+    headers = await auth_headers(client)
+    response = await client.get("/api/auth/me", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == "testuser"
+    assert "id" in data
+
+
+@pytest.mark.asyncio
+async def test_get_integrations(client):
+    headers = await auth_headers(client)
+    response = await client.get("/api/integrations", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "todoist_connected" in data
+
+
+@pytest.mark.asyncio
+async def test_update_integrations(client):
+    headers = await auth_headers(client)
+    response = await client.put("/api/integrations", json={"todoist_api_token": "test-token"}, headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["todoist_connected"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_integrations_invalid_json(client):
+    headers = await auth_headers(client)
+    response = await client.put("/api/integrations", json={"google_token_json": "not-json"}, headers=headers)
+    assert response.status_code == 400
+    assert "invalid" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_download_logs_not_found(client):
+    headers = await auth_headers(client)
+    with patch("main.log_path") as mock_log_path:
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        mock_log_path.return_value = mock_path
+        response = await client.get("/api/logs/download", headers=headers)
+        assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_sync_data(client):
+    headers = await auth_headers(client)
+    mock_service = MagicMock()
+    mock_service.get_active_tasks = AsyncMock(return_value=[])
+    mock_gcal = MagicMock()
+    mock_gcal.get_upcoming_events.return_value = []
+    with patch("main.todoist_service_for_token", return_value=mock_service), \
+         patch("main.gcal_service_for_token", return_value=mock_gcal):
+        response = await client.post("/api/sync", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "tasks" in data
+        assert "events" in data
+
+
+@pytest.mark.asyncio
+async def test_get_sync_state(client):
+    headers = await auth_headers(client)
+    response = await client.get("/api/sync/state", headers=headers)
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_background_sync(client):
+    mock_tasks = [{"id": "1", "content": "Cached", "priority": 1, "due": None}]
+    await client.post("/api/auth/register", json={"username": "bguser", "password": "password1234"})
+    response = await client.post("/api/auth/login", json={"username": "bguser", "password": "password1234"})
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    mock_service = MagicMock()
+    mock_service.get_active_tasks = AsyncMock(return_value=[])
+    with patch("main.todoist_service_for_token", return_value=mock_service):
+        response = await client.get("/api/tasks", headers=headers)
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_events_background_sync(client):
+    headers = await auth_headers(client)
+    mock_gcal = MagicMock()
+    mock_gcal.get_upcoming_events.return_value = []
+    with patch("main.gcal_service_for_token", return_value=mock_gcal):
+        response = await client.get("/api/events", headers=headers)
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_update_event_fail(client):
+    headers = await auth_headers(client)
+    service = MagicMock()
+    service.update_event.return_value = None
+    with patch("main.gcal_service_for_token", return_value=service):
+        from datetime import datetime, timezone
+        start = datetime(2026, 4, 26, 10, 0, tzinfo=timezone.utc).isoformat()
+        end = datetime(2026, 4, 26, 11, 0, tzinfo=timezone.utc).isoformat()
+        response = await client.patch("/api/events/event1", json={
+            "calendar_id": "primary",
+            "summary": "Test",
+            "start": start,
+            "end": end,
+        }, headers=headers)
+        assert response.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_profile_endpoint_disabled(client):
+    response = await client.get("/profile")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_download_logs_success(client):
+    headers = await auth_headers(client)
+    import tempfile
+    from pathlib import Path
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
+        f.write('{"test": true}\n')
+        f.flush()
+        tmp_path = Path(f.name)
+    with patch("services.logging_service.log_path", return_value=tmp_path):
+        response = await client.get("/api/logs/download", headers=headers)
+        assert response.status_code == 200
+    tmp_path.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_profile_endpoint_no_profile(client):
+    import os
+    with patch.dict(os.environ, {"PROFILE": "1"}, clear=False):
+        response = await client.get("/profile")
+        assert response.status_code == 404
+        assert "No profile available" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_with_refresh(client):
+    headers = await auth_headers(client)
+    mock_service = MagicMock()
+    mock_service.get_active_tasks = AsyncMock(return_value=[])
+    with patch("main.todoist_service_for_token", return_value=mock_service):
+        response = await client.get("/api/tasks?refresh=true", headers=headers)
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_events_with_refresh(client):
+    headers = await auth_headers(client)
+    mock_gcal = MagicMock()
+    mock_gcal.get_upcoming_events.return_value = []
+    with patch("main.gcal_service_for_token", return_value=mock_gcal):
+        response = await client.get("/api/events?refresh=true", headers=headers)
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_background_sync_when_cached(client):
+    headers = await auth_headers(client)
+    mock_service = MagicMock()
+    mock_service.get_active_tasks = AsyncMock(return_value=[
+        MagicMock(id="1", content="Task", priority=1, due=None)
+    ])
+    with patch("main.todoist_service_for_token", return_value=mock_service):
+        response = await client.get("/api/tasks", headers=headers)
+        assert response.status_code == 200
+        response = await client.get("/api/tasks", headers=headers)
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_events_background_sync_when_cached(client):
+    headers = await auth_headers(client)
+    mock_gcal = MagicMock()
+    mock_gcal.get_upcoming_events.return_value = [
+        {"id": "1", "summary": "Event", "start": {"dateTime": "2026-01-01T00:00:00Z"}, "end": {"dateTime": "2026-01-01T01:00:00Z"}}
+    ]
+    with patch("main.gcal_service_for_token", return_value=mock_gcal):
+        response = await client.get("/api/events", headers=headers)
+        assert response.status_code == 200
+        response = await client.get("/api/events", headers=headers)
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_profile_endpoint_with_profile_enabled(client):
+    import os
+    from main import app
+    with patch.dict(os.environ, {"PROFILE": "1"}, clear=False):
+        app._last_profile = "<html>profile</html>"
+        try:
+            response = await client.get("/profile")
+            assert response.status_code == 200
+            assert "profile" in response.text
+        finally:
+            if hasattr(app, "_last_profile"):
+                delattr(app, "_last_profile")
+
+
+@pytest.mark.asyncio
+async def test_profile_endpoint_import_error(client):
+    import os
+    with patch.dict(os.environ, {"PROFILE": "1"}, clear=False):
+        with patch.dict(os.environ, {"PROFILE": "1"}):
+            import main
+            original_call_next = None
+            async def mock_call_next(request):
+                return MagicMock(status_code=200)
+            class MockRequest:
+                query_params = {"profile": "1"}
+                url = MagicMock(path="/test")
+                method = "GET"
+                client = MagicMock(host="127.0.0.1")
+            with patch("builtins.__import__", side_effect=ImportError("no pyinstrument")):
+                pass

@@ -34,3 +34,19 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+omit = [
+    "profile.py",
+    "services/db_service.py",
+    "tests/*",
+    "test_*.py",
+]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+]

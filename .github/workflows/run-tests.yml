@@ -84,7 +84,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           set -o pipefail
-          uv run pytest --cov=. --cov-report=term-missing --cov-report=html | tee coverage.txt
+          uv run pytest --cov=. --cov-report=term-missing --cov-report=html --cov-config=pyproject.toml | tee coverage.txt
           {
             echo "## Backend coverage"
             echo '```'
