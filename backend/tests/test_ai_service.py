@@ -6,9 +6,10 @@ from services.ai_service import AIService
 @pytest.fixture
 def ai_service():
     with patch('services.ai_service.AsyncOpenAI') as mock_openai:
-        service = AIService()
-        service.client = mock_openai.return_value
-        return service
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
+            service = AIService()
+            service.client = mock_openai.return_value
+            return service
 
 @pytest.mark.asyncio
 async def test_parse_task_nlp_success(ai_service):
