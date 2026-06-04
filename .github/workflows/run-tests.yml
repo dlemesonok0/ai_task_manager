@@ -120,7 +120,6 @@ jobs:
   deploy:
     name: Deploy
     needs:
-      
       - backend-tests
       - frontend-tests
     runs-on: ubuntu-latest
