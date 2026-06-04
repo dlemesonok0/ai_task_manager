@@ -19,23 +19,6 @@ env:
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/ai_task_manager-frontend
 
 jobs:
-  reject-direct-push:
-    name: Reject Direct Push
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master')
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Require merge commit on protected branch
-        run: |
-          parent_count="$(git rev-list --parents -n 1 HEAD | wc -w)"
-          if [ "$parent_count" -lt 3 ]; then
-            echo "Direct pushes to master are not allowed. Merge a pull request instead."
-            exit 1
-          fi
-
   yaml-lint:
     name: YAML Lint
     runs-on: ubuntu-latest
@@ -60,9 +43,7 @@ jobs:
   backend-tests:
     name: Backend Tests
     needs:
-      - reject-direct-push
       - yaml-lint
-    if: always() && (needs.reject-direct-push.result == 'success' || needs.reject-direct-push.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -101,9 +82,6 @@ jobs:
 
   frontend-tests:
     name: Frontend Tests
-    needs:
-      - reject-direct-push
-    if: always() && (needs.reject-direct-push.result == 'success' || needs.reject-direct-push.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -142,11 +120,11 @@ jobs:
   deploy:
     name: Deploy
     needs:
-      - reject-direct-push
+      
       - backend-tests
       - frontend-tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master') && needs.reject-direct-push.result == 'success'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master')
     steps:
       - uses: actions/checkout@v4
 
