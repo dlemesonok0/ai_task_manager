@@ -103,3 +103,31 @@
 - `uv sync --group dev` устанавливает всё (prod + dev).
 - Frontend-сборка (`npm run build`) работает без предупреждений о пропущенных dev-пакетах.
 - Все тесты проходят.
+
+### TASK-009: Оптимизация потребления ресурсов
+
+Статус: `todo`
+
+Цель: уменьшить потребление памяти и размер Docker-образов на основе результатов профилирования.
+
+Объем работ:
+- **Backend Docker-образ (727 MB)**: перейти на `python:3.13-slim` или `python:3.13-alpine`, использовать multi-stage build, удалить `.venv` кэш и неиспользуемые файлы.
+- **Backend memory (87 MB RSS)**: сделать lazy-load для `ai_service` (openai — 17 MB), `gcal_service` (15 MB) — импортировать только при первом вызове.
+- **Frontend bundle (207 KB JS)**: проверить `dist/stats.html`, убрать неиспользуемые зависимости, включить code splitting если нужно.
+- **Bot memory (113 MB)**: проанализировать, можно ли уменьшить (aiogram + google-клиенты).
+
+Основные файлы:
+- `backend/Dockerfile`
+- `backend/main.py`
+- `backend/services/ai_service.py`
+- `backend/services/gcal_service.py`
+- `backend/services/todoist_service.py`
+- `frontend/src/App.tsx`
+- `frontend/vite.config.ts`
+
+Критерии приемки:
+- Backend Docker-образ ≤ 300 MB.
+- Backend RSS при старте ≤ 60 MB.
+- Frontend JS bundle (gzip) ≤ 50 KB.
+- Все тесты проходят.
+- Профилирование (`uv run python profile_imports.py`) показывает уменьшение RSS.

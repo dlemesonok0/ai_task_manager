@@ -6,9 +6,10 @@ from services.ai_service import AIService
 @pytest.fixture
 def ai_service():
     with patch('services.ai_service.AsyncOpenAI') as mock_openai:
-        service = AIService()
-        service.client = mock_openai.return_value
-        return service
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
+            service = AIService()
+            service.client = mock_openai.return_value
+            return service
 
 @pytest.mark.asyncio
 async def test_parse_task_nlp_success(ai_service):
@@ -67,7 +68,7 @@ def test_ai_service_init_gemini():
     with patch.dict('os.environ', {'GEMINI_API_KEY': 'some_key'}):
         with patch('services.ai_service.AsyncOpenAI') as mock_openai:
             service = AIService()
-            assert service.model == "gemini-2.0-flash"
+            assert service.model == "gemini-3.1-flash-lite"
 
 def test_ai_service_init_openai():
     with patch.dict('os.environ', {'GEMINI_API_KEY': '', 'OPENAI_API_KEY': 'sk-test'}):
@@ -85,3 +86,29 @@ def test_ai_service_init_none():
     with patch.dict('os.environ', {'GEMINI_API_KEY': '', 'OPENAI_API_KEY': '', 'LLM_BASE_URL': ''}):
         service = AIService()
         assert service.client is None
+
+
+@pytest.mark.asyncio
+async def test_health_check_no_client():
+    service = AIService()
+    service.client = None
+    result = await service.health_check()
+    assert result["status"] == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_health_check_ok(ai_service):
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content="ok"))]
+    ai_service.client.chat.completions.create = AsyncMock(return_value=mock_response)
+    result = await ai_service.health_check()
+    assert result["status"] == "ok"
+    assert result["provider"] is not None
+
+
+@pytest.mark.asyncio
+async def test_health_check_degraded(ai_service):
+    ai_service.client.chat.completions.create = AsyncMock(side_effect=Exception("API Error"))
+    result = await ai_service.health_check()
+    assert result["status"] == "degraded"
+    assert "error" in result

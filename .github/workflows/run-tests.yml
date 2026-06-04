@@ -83,7 +83,8 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest --cov=. --cov-report=term-missing --cov-report=html | tee coverage.txt
+          set -o pipefail
+          uv run pytest --cov=. --cov-report=term-missing --cov-report=html --cov-config=pyproject.toml | tee coverage.txt
           {
             echo "## Backend coverage"
             echo '```'
@@ -122,6 +123,7 @@ jobs:
 
       - name: Run Vitest with coverage
         run: |
+          set -o pipefail
           npx vitest run --coverage --coverage.reporter=text --coverage.reporter=html | tee coverage.txt
           {
             echo "## Frontend coverage"

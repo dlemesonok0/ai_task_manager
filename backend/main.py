@@ -1,9 +1,10 @@
 import logging
+import os
 import time
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from services.todoist_service import todoist_service_for_token
@@ -182,6 +183,21 @@ async def log_requests(request, call_next):
             ),
         )
 
+@app.middleware("http")
+async def profile_requests(request, call_next):
+    if os.environ.get("PROFILE") != "1" or request.query_params.get("profile") != "1":
+        return await call_next(request)
+    try:
+        from pyinstrument import Profiler
+        profiler = Profiler()
+        profiler.start()
+        response = await call_next(request)
+        profiler.stop()
+        app._last_profile = profiler.output_html()  # type: ignore
+        return response
+    except ImportError:
+        return await call_next(request)
+
 @app.post("/api/auth/login", response_model=TokenResponse, tags=["Auth"])
 def login(credentials: LoginRequest):
     user = authenticate_user_record(credentials.username, credentials.password)
@@ -331,3 +347,15 @@ def read_root():
 @app.get("/api/health/ai", tags=["Health"])
 async def ai_health():
     return await ai_service.health_check()
+
+@app.get("/profile", tags=["Debug"])
+def profile_last_request():
+    """Return CPU profile of the last profiled request.
+    Usage: add ?profile=1 query param to any request, then fetch this endpoint.
+    Only available when PROFILE=1 env var is set.
+    """
+    if os.environ.get("PROFILE") != "1":
+        raise HTTPException(status_code=404, detail="Profiling disabled")
+    if not hasattr(app, "_last_profile"):
+        raise HTTPException(status_code=404, detail="No profile available")
+    return HTMLResponse(app._last_profile)  # type: ignore

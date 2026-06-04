@@ -147,3 +147,51 @@ def test_authenticate_no_token():
     service = GoogleCalendarService()
     service._authenticate()
     assert service.creds is None
+
+
+def test_authenticate_invalid_token_json():
+    service = GoogleCalendarService(token_json='not-valid-json')
+    service._authenticate()
+    assert service.creds is None
+
+
+def test_authenticate_refresh_error():
+    with patch('services.gcal_service.Credentials') as mock_creds:
+        creds = mock_creds.from_authorized_user_info.return_value
+        creds.valid = False
+        creds.expired = True
+        creds.refresh_token = "refresh"
+        creds.refresh.side_effect = Exception("Refresh failed")
+
+        service = GoogleCalendarService(token_json='{"token": "fake"}')
+        service._authenticate()
+        assert creds.refresh.called
+
+
+def test_authenticate_build_error():
+    with patch('services.gcal_service.Credentials') as mock_creds, \
+         patch('services.gcal_service.build') as mock_build:
+        mock_creds.from_authorized_user_info.return_value.valid = True
+        mock_build.side_effect = Exception("Build failed")
+
+        service = GoogleCalendarService(token_json='{"token": "fake"}')
+        service._authenticate()
+        assert service._service is None
+
+
+def test_authenticate_invalid_not_expired():
+    with patch('services.gcal_service.Credentials') as mock_creds:
+        creds = mock_creds.from_authorized_user_info.return_value
+        creds.valid = False
+        creds.expired = False
+
+        service = GoogleCalendarService(token_json='{"token": "fake"}')
+        service._authenticate()
+        assert service.creds is None
+
+
+def test_gcal_service_for_token():
+    from services.gcal_service import gcal_service_for_token
+    service = gcal_service_for_token('{"test": true}')
+    assert isinstance(service, GoogleCalendarService)
+    assert service.token_json == '{"test": true}'

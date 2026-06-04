@@ -1,6 +1,16 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from bot import command_start_handler, command_help_handler, command_link_handler, command_inbox_handler, command_briefing_handler, command_autoschedule_handler, text_handler
+from bot import (
+    command_start_handler,
+    command_help_handler,
+    command_link_handler,
+    command_inbox_handler,
+    command_briefing_handler,
+    command_autoschedule_handler,
+    text_handler,
+    _link_telegram_account,
+    _linked_context,
+)
 
 @pytest.fixture
 def mock_message():
@@ -151,3 +161,167 @@ async def test_text_handler_fail(mock_message):
         
         await text_handler(mock_message)
         status_msg.edit_text.assert_called_with("❌ Failed to create task in Todoist. Check your API token.")
+
+
+@pytest.mark.asyncio
+async def test_link_telegram_no_user_id():
+    message = AsyncMock()
+    message.from_user = None
+    message.answer = AsyncMock()
+    await _link_telegram_account(message, "CODE123")
+    message.answer.assert_called_with("Не удалось определить Telegram user id. Попробуй еще раз позже.")
+
+
+@pytest.mark.asyncio
+async def test_link_telegram_invalid_code():
+    message = AsyncMock()
+    message.from_user.id = 1001
+    message.from_user.username = "test"
+    message.from_user.full_name = "Test"
+    message.answer = AsyncMock()
+    with patch('bot.db_service') as mock_db:
+        mock_db.consume_telegram_link_code.return_value = None
+        await _link_telegram_account(message, "CODE123")
+        message.answer.assert_called_with("Код привязки не найден или уже истек. Создай новый код в web-интерфейсе.")
+
+
+@pytest.mark.asyncio
+async def test_linked_context_no_user_id():
+    message = AsyncMock()
+    message.from_user = None
+    message.answer = AsyncMock()
+    result = await _linked_context(message)
+    assert result is None
+    message.answer.assert_called_with("Не удалось определить Telegram user id. Попробуй еще раз позже.")
+
+
+@pytest.mark.asyncio
+async def test_linked_context_not_linked():
+    message = AsyncMock()
+    message.from_user.id = 1001
+    message.from_user.username = "test"
+    message.from_user.full_name = "Test"
+    message.answer = AsyncMock()
+    with patch('bot.db_service') as mock_db:
+        mock_db.get_user_by_telegram_id.return_value = None
+        result = await _linked_context(message)
+        assert result is None
+        message.answer.assert_called()
+        assert "привяжи" in message.answer.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_linked_context_no_todoist():
+    message = AsyncMock()
+    message.from_user.id = 1001
+    message.from_user.username = "test"
+    message.from_user.full_name = "Test"
+    message.answer = AsyncMock()
+    with patch('bot.db_service') as mock_db:
+        mock_db.get_user_by_telegram_id.return_value = {"id": 1, "username": "admin"}
+        mock_db.get_integrations.return_value = {"todoist_api_token": None}
+        result = await _linked_context(message)
+        assert result is None
+        message.answer.assert_called()
+        assert "Todoist" in message.answer.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_command_start_with_link_code():
+    message = AsyncMock()
+    message.text = "/start CODE123"
+    message.from_user.id = 1001
+    message.from_user.username = "test"
+    message.from_user.full_name = "Test"
+    message.answer = AsyncMock()
+    with patch('bot.db_service') as mock_db:
+        mock_db.consume_telegram_link_code.return_value = {"id": 1, "username": "admin"}
+        await command_start_handler(message)
+        mock_db.consume_telegram_link_code.assert_called()
+        message.answer.assert_called()
+        assert "привязан" in message.answer.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_command_link_no_code():
+    message = AsyncMock()
+    message.text = "/link"
+    message.answer = AsyncMock()
+    await command_link_handler(message)
+    message.answer.assert_called_with("Напиши код после команды: /link ABCD1234")
+
+
+@pytest.mark.asyncio
+async def test_command_inbox_no_context():
+    message = AsyncMock()
+    message.text = "/inbox test"
+    message.from_user.id = 1001
+    message.from_user.username = "test"
+    message.from_user.full_name = "Test"
+    message.answer = AsyncMock()
+    with patch('bot.db_service') as mock_db:
+        mock_db.get_user_by_telegram_id.return_value = None
+        await command_inbox_handler(message)
+        message.answer.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_command_briefing_no_context():
+    message = AsyncMock()
+    message.from_user.id = 1001
+    message.from_user.username = "test"
+    message.from_user.full_name = "Test"
+    message.answer = AsyncMock()
+    with patch('bot.db_service') as mock_db:
+        mock_db.get_user_by_telegram_id.return_value = None
+        await command_briefing_handler(message)
+        message.answer.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_text_handler_no_context():
+    message = AsyncMock()
+    message.text = "Some task"
+    message.from_user.id = 1001
+    message.from_user.username = "test"
+    message.from_user.full_name = "Test"
+    message.answer = AsyncMock()
+    with patch('bot.db_service') as mock_db:
+        mock_db.get_user_by_telegram_id.return_value = None
+        await text_handler(message)
+        message.answer.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_main_no_token():
+    with patch('bot.TOKEN', None), patch('bot.logger') as mock_logger:
+        from bot import main
+        await main()
+        mock_logger.warning.assert_called_once_with(
+            "TELEGRAM_BOT_TOKEN is not set. Bot will not start"
+        )
+
+
+@pytest.mark.asyncio
+async def test_main_placeholder_token():
+    with patch('bot.TOKEN', "your_telegram_bot_token_here"), patch('bot.logger') as mock_logger:
+        from bot import main
+        await main()
+        mock_logger.warning.assert_called_once_with(
+            "TELEGRAM_BOT_TOKEN is not set. Bot will not start"
+        )
+
+
+@pytest.mark.asyncio
+async def test_main_with_token():
+    mock_bot = AsyncMock()
+    with patch('bot.TOKEN', "real_token"), \
+         patch('bot.Bot', return_value=mock_bot) as mock_bot_cls, \
+         patch('bot.dp') as mock_dp, \
+         patch('bot.logger') as mock_logger:
+        mock_dp.start_polling = AsyncMock()
+        from bot import main
+        await main()
+        mock_bot_cls.assert_called_once_with(token="real_token")
+        mock_dp.start_polling.assert_called_once_with(mock_bot)
+        mock_logger.info.assert_called_once_with("Starting Telegram Bot polling")
