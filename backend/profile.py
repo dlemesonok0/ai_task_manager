@@ -148,12 +148,10 @@ def profile_memory():
     print(f"Delta RSS:            {mb(mem_after.rss - mem_before.rss):.1f} MB")
 
     current, peak = tracemalloc.get_traced_memory()
+    snapshot = tracemalloc.take_snapshot()
     tracemalloc.stop()
     print(f"Tracemalloc current:  {mb(current):.2f} MB")
     print(f"Tracemalloc peak:     {mb(peak):.2f} MB")
-
-    # Топ-10 по выделению памяти
-    snapshot = tracemalloc.take_snapshot()
     stats = snapshot.statistics("lineno")[:10]
     print(f"\n  Топ-10 строк по выделению памяти:")
     for stat in stats:

@@ -179,6 +179,17 @@ def test_authenticate_build_error():
         assert service._service is None
 
 
+def test_authenticate_invalid_not_expired():
+    with patch('services.gcal_service.Credentials') as mock_creds:
+        creds = mock_creds.from_authorized_user_info.return_value
+        creds.valid = False
+        creds.expired = False
+
+        service = GoogleCalendarService(token_json='{"token": "fake"}')
+        service._authenticate()
+        assert service.creds is None
+
+
 def test_gcal_service_for_token():
     from services.gcal_service import gcal_service_for_token
     service = gcal_service_for_token('{"test": true}')

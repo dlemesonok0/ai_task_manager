@@ -290,3 +290,38 @@ async def test_text_handler_no_context():
         mock_db.get_user_by_telegram_id.return_value = None
         await text_handler(message)
         message.answer.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_main_no_token():
+    with patch('bot.TOKEN', None), patch('bot.logger') as mock_logger:
+        from bot import main
+        await main()
+        mock_logger.warning.assert_called_once_with(
+            "TELEGRAM_BOT_TOKEN is not set. Bot will not start"
+        )
+
+
+@pytest.mark.asyncio
+async def test_main_placeholder_token():
+    with patch('bot.TOKEN', "your_telegram_bot_token_here"), patch('bot.logger') as mock_logger:
+        from bot import main
+        await main()
+        mock_logger.warning.assert_called_once_with(
+            "TELEGRAM_BOT_TOKEN is not set. Bot will not start"
+        )
+
+
+@pytest.mark.asyncio
+async def test_main_with_token():
+    mock_bot = AsyncMock()
+    with patch('bot.TOKEN', "real_token"), \
+         patch('bot.Bot', return_value=mock_bot) as mock_bot_cls, \
+         patch('bot.dp') as mock_dp, \
+         patch('bot.logger') as mock_logger:
+        mock_dp.start_polling = AsyncMock()
+        from bot import main
+        await main()
+        mock_bot_cls.assert_called_once_with(token="real_token")
+        mock_dp.start_polling.assert_called_once_with(mock_bot)
+        mock_logger.info.assert_called_once_with("Starting Telegram Bot polling")
