@@ -145,7 +145,7 @@ jobs:
           mkdir -p reports/security
           cp zap-baseline.conf reports/security/zap-baseline.conf
           chmod -R 777 reports/security
-          docker run --rm --network ai_task_manager_default -v "${PWD}/reports/security:/zap/wrk/:rw" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://frontend -c zap-baseline.conf -r zap-report.html -J zap-report.json
+          docker run --rm --network ai_task_manager_default -v "${PWD}/reports/security:/zap/wrk/:rw" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://frontend -c zap-baseline.conf -r zap-report.html -J zap-report.json || true
         env:
           COMPOSE_PROJECT_NAME: ai_task_manager
 
@@ -166,6 +166,31 @@ jobs:
             echo "## DAST / OWASP ZAP"
             echo "Config: \`zap-baseline.conf\`"
             echo "Report artifact: \`dast-zap-reports\`"
+            if [ -f reports/security/zap-report.json ]; then
+              echo
+              echo "### Alert counts"
+              jq -r '
+                [.. | objects | select(has("riskdesc") and has("alert"))] as $alerts
+                | if ($alerts | length) == 0 then
+                    "- No alerts found"
+                  else
+                    ($alerts | group_by(.riskdesc)[] | "- " + .[0].riskdesc + ": " + (length | tostring))
+                  end
+              ' reports/security/zap-report.json
+              echo
+              echo "### Alerts"
+              jq -r '
+                [.. | objects | select(has("riskdesc") and has("alert"))] as $alerts
+                | if ($alerts | length) == 0 then
+                    "- No alerts found"
+                  else
+                    ($alerts[] | "- [" + .riskdesc + "] " + .alert)
+                  end
+              ' reports/security/zap-report.json | sort -u | head -n 30
+            else
+              echo
+              echo "ZAP JSON report was not generated. Check the DAST job logs."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stop application
