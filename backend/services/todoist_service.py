@@ -52,6 +52,26 @@ class TodoistService:
         """Create a task in Todoist Inbox without a due date."""
         return await self.create_task(content=content, due_string=None, priority=1)
 
+    async def update_task(self, task_id: str, content: Optional[str] = None, due_string: Optional[str] = None, priority: Optional[int] = None) -> Optional[Task]:
+        """Update a task in Todoist."""
+        if not self.api:
+            return None
+        try:
+            task_data = {}
+            if content is not None:
+                task_data["content"] = content
+            if due_string is not None:
+                task_data["due_string"] = due_string
+            if priority is not None:
+                task_data["priority"] = priority
+            if not task_data:
+                return None
+            task = await self.api.update_task(task_id=task_id, **task_data)
+            return task
+        except Exception:
+            logger.exception("Error updating task in Todoist")
+            return None
+
     async def close_task(self, task_id: str) -> bool:
         """Close a task by ID."""
         if not self.api:
@@ -61,6 +81,17 @@ class TodoistService:
             return is_success
         except Exception:
             logger.exception("Error closing task in Todoist")
+            return False
+
+    async def delete_task(self, task_id: str) -> bool:
+        """Delete a task by ID."""
+        if not self.api:
+            return False
+        try:
+            is_success = await self.api.delete_task(task_id=task_id)
+            return is_success
+        except Exception:
+            logger.exception("Error deleting task in Todoist")
             return False
 
 # Create a singleton instance

@@ -274,4 +274,208 @@ describe('App Component', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('can complete a task', async () => {
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (url.includes('/api/tasks') && options?.method === 'POST' && url.includes('/close')) {
+        return Promise.resolve({ ok: true });
+      }
+      if (url.includes('/api/tasks')) {
+        return Promise.resolve({ ok: true, json: async () => mockTasks });
+      }
+      if (url.includes('/api/events')) {
+        return Promise.resolve({ ok: true, json: async () => mockEvents });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    const completeButtons = screen.getAllByTitle('Complete');
+    fireEvent.click(completeButtons[0]);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/tasks/1/close'), expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' })
+      }));
+    });
+  });
+
+  it('can delete a task', async () => {
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (options?.method === 'DELETE') {
+        return Promise.resolve({ ok: true });
+      }
+      if (url.includes('/api/tasks')) {
+        return Promise.resolve({ ok: true, json: async () => mockTasks });
+      }
+      if (url.includes('/api/events')) {
+        return Promise.resolve({ ok: true, json: async () => mockEvents });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByTitle('Delete');
+    fireEvent.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/tasks/1'), expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' })
+      }));
+    });
+  });
+
+  it('can edit a task', async () => {
+    const mockUpdatedTask = { ...mockTasks[0], content: 'Updated Task 1' };
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (options?.method === 'PUT') {
+        return Promise.resolve({ ok: true, json: async () => mockUpdatedTask });
+      }
+      if (url.includes('/api/tasks')) {
+        return Promise.resolve({ ok: true, json: async () => mockTasks });
+      }
+      if (url.includes('/api/events')) {
+        return Promise.resolve({ ok: true, json: async () => mockEvents });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    const editButtons = screen.getAllByTitle('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Task 1')).toBeInTheDocument();
+    });
+
+    const contentInput = screen.getByDisplayValue('Task 1');
+    fireEvent.change(contentInput, { target: { value: 'Updated Task 1' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/tasks/1'), expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+        body: expect.stringContaining('Updated Task 1')
+      }));
+    });
+  });
+
+  it('handles complete task error gracefully', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (url.includes('/api/tasks') && options?.method === 'POST' && url.includes('/close')) {
+        return Promise.reject(new Error('Close Failed'));
+      }
+      if (url.includes('/api/tasks')) {
+        return Promise.resolve({ ok: true, json: async () => mockTasks });
+      }
+      if (url.includes('/api/events')) {
+        return Promise.resolve({ ok: true, json: async () => mockEvents });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    const completeButtons = screen.getAllByTitle('Complete');
+    fireEvent.click(completeButtons[0]);
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalled();
+    });
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles delete task error gracefully', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (options?.method === 'DELETE') {
+        return Promise.reject(new Error('Delete Failed'));
+      }
+      if (url.includes('/api/tasks')) {
+        return Promise.resolve({ ok: true, json: async () => mockTasks });
+      }
+      if (url.includes('/api/events')) {
+        return Promise.resolve({ ok: true, json: async () => mockEvents });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByTitle('Delete');
+    fireEvent.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalled();
+    });
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles edit task error gracefully', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    (fetch as any).mockImplementation((url: string, options?: any) => {
+      if (options?.method === 'PUT') {
+        return Promise.reject(new Error('Update Failed'));
+      }
+      if (url.includes('/api/tasks')) {
+        return Promise.resolve({ ok: true, json: async () => mockTasks });
+      }
+      if (url.includes('/api/events')) {
+        return Promise.resolve({ ok: true, json: async () => mockEvents });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Syncing with Todoist/i)).not.toBeInTheDocument();
+    });
+
+    const editButtons = screen.getAllByTitle('Edit');
+    fireEvent.click(editButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Task 1')).toBeInTheDocument();
+    });
+
+    const contentInput = screen.getByDisplayValue('Task 1');
+    fireEvent.change(contentInput, { target: { value: 'Updated Task 1' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalled();
+    });
+
+    consoleSpy.mockRestore();
+  });
 });

@@ -24,6 +24,13 @@ interface EventEditorState {
   end: string;
 }
 
+interface TaskEditorState {
+  id: string;
+  content: string;
+  priority: number;
+  due_string: string;
+}
+
 interface TaskGroup {
   title: string;
   tasks: Task[];
@@ -89,6 +96,8 @@ function App() {
   const [fetchError, setFetchError] = useState('');
   const [editingEvent, setEditingEvent] = useState<EventEditorState | null>(null);
   const [savingEvent, setSavingEvent] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskEditorState | null>(null);
+  const [savingTask, setSavingTask] = useState(false);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(authTokenStorageKey) || '');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -316,6 +325,87 @@ function App() {
       console.error("Error creating Telegram link code:", err);
     } finally {
       setCreatingTelegramLink(false);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/close`, {
+        method: 'POST',
+        headers: authHeaders
+      });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      if (res.ok) {
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Error completing task:", err);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      if (res.ok) {
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Error deleting task:", err);
+    }
+  };
+
+  const openTaskEditor = (task: Task) => {
+    setEditingTask({
+      id: task.id,
+      content: task.content,
+      priority: task.priority,
+      due_string: task.due || ''
+    });
+  };
+
+  const handleUpdateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask) return;
+
+    setSavingTask(true);
+    try {
+      const body: Record<string, unknown> = { content: editingTask.content };
+      if (editingTask.priority !== 1) body.priority = editingTask.priority;
+      if (editingTask.due_string) body.due_string = editingTask.due_string;
+
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${encodeURIComponent(editingTask.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(body)
+      });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      if (res.ok) {
+        setEditingTask(null);
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Error updating task:", err);
+    } finally {
+      setSavingTask(false);
     }
   };
 
@@ -585,6 +675,11 @@ function App() {
                             <span>Priority: P{5 - task.priority}</span>
                             {task.due && <span>Due: {task.due}</span>}
                           </div>
+                          <div className="item-actions">
+                            <button type="button" className="btn-icon complete" title="Complete" onClick={() => handleCompleteTask(task.id)}>✓</button>
+                            <button type="button" className="btn-icon edit" title="Edit" onClick={() => openTaskEditor(task)}>✎</button>
+                            <button type="button" className="btn-icon delete" title="Delete" onClick={() => handleDeleteTask(task.id)}>✕</button>
+                          </div>
                         </div>
                       ))
                     )}
@@ -645,6 +740,11 @@ function App() {
                           <div className="item-meta">
                             <span>Priority: P{5 - task.priority}</span>
                             {task.due && <span>Due: {task.due}</span>}
+                          </div>
+                          <div className="item-actions">
+                            <button type="button" className="btn-icon complete" title="Complete" onClick={() => handleCompleteTask(task.id)}>✓</button>
+                            <button type="button" className="btn-icon edit" title="Edit" onClick={() => openTaskEditor(task)}>✎</button>
+                            <button type="button" className="btn-icon delete" title="Delete" onClick={() => handleDeleteTask(task.id)}>✕</button>
                           </div>
                         </div>
                       ))}
@@ -739,6 +839,11 @@ function App() {
                               <div className="item-meta">
                                 <span>Priority: P{5 - task.priority}</span>
                                 {task.due && <span>Due: {task.due}</span>}
+                              </div>
+                              <div className="item-actions">
+                                <button type="button" className="btn-icon complete" title="Complete" onClick={() => handleCompleteTask(task.id)}>✓</button>
+                                <button type="button" className="btn-icon edit" title="Edit" onClick={() => openTaskEditor(task)}>✎</button>
+                                <button type="button" className="btn-icon delete" title="Delete" onClick={() => handleDeleteTask(task.id)}>✕</button>
                               </div>
                             </div>
                           ))}
@@ -836,6 +941,53 @@ function App() {
               <button type="button" onClick={() => setEditingEvent(null)}>Cancel</button>
               <button type="submit" disabled={savingEvent}>
                 {savingEvent ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {editingTask && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="task-editor" onSubmit={handleUpdateTask}>
+            <div className="task-editor-header">
+              <h3>Edit task</h3>
+              <button type="button" onClick={() => setEditingTask(null)}>Close</button>
+            </div>
+            <label>
+              Content
+              <input
+                type="text"
+                value={editingTask.content}
+                onChange={(e) => setEditingTask({ ...editingTask, content: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Priority
+              <select
+                value={editingTask.priority}
+                onChange={(e) => setEditingTask({ ...editingTask, priority: Number(e.target.value) })}
+              >
+                <option value={1}>P4 (Low)</option>
+                <option value={2}>P3 (Medium)</option>
+                <option value={3}>P2 (High)</option>
+                <option value={4}>P1 (Urgent)</option>
+              </select>
+            </label>
+            <label>
+              Due string (e.g. "tomorrow", "next monday")
+              <input
+                type="text"
+                value={editingTask.due_string}
+                onChange={(e) => setEditingTask({ ...editingTask, due_string: e.target.value })}
+                placeholder="today"
+              />
+            </label>
+            <div className="task-editor-actions">
+              <button type="button" onClick={() => setEditingTask(null)}>Cancel</button>
+              <button type="submit" disabled={savingTask}>
+                {savingTask ? 'Saving...' : 'Save'}
               </button>
             </div>
           </form>

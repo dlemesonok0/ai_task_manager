@@ -383,6 +383,13 @@ def upsert_task(user_id: int, task: dict[str, Any]) -> None:
             )
 
 
+def delete_task(user_id: int, task_id: str) -> None:
+    ensure_initialized()
+    with _lock, _connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM cached_tasks WHERE user_id = %s AND id = %s", (user_id, task_id))
+
+
 def get_tasks(user_id: int) -> list[dict[str, Any]]:
     ensure_initialized()
     with _lock, _connect() as connection:

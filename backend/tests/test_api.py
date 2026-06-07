@@ -419,6 +419,92 @@ async def test_profile_endpoint_with_profile_enabled(client):
 
 
 @pytest.mark.asyncio
+async def test_update_task(client):
+    class MockTask:
+        def __init__(self, id, content, priority, due=None):
+            self.id = id
+            self.content = content
+            self.priority = priority
+            self.due = due
+
+    mock_task = MockTask("123", "Updated Task", 3)
+
+    service = MagicMock()
+    service.update_task = AsyncMock(return_value=mock_task)
+    with patch("main.todoist_service_for_token", return_value=service):
+        response = await client.put("/api/tasks/123", json={"content": "Updated Task", "priority": 3}, headers=await auth_headers(client))
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "Updated Task"
+        assert data["id"] == "123"
+
+@pytest.mark.asyncio
+async def test_update_task_fail(client):
+    service = MagicMock()
+    service.update_task = AsyncMock(return_value=None)
+    with patch("main.todoist_service_for_token", return_value=service):
+        response = await client.put("/api/tasks/123", json={"content": "Updated Task"}, headers=await auth_headers(client))
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Failed to update task"
+
+@pytest.mark.asyncio
+async def test_update_task_requires_auth(client):
+    response = await client.put("/api/tasks/123", json={"content": "Updated Task"})
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_close_task(client):
+    service = MagicMock()
+    service.close_task = AsyncMock(return_value=True)
+    with patch("main.todoist_service_for_token", return_value=service):
+        response = await client.post("/api/tasks/123/close", headers=await auth_headers(client))
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "completed"}
+
+@pytest.mark.asyncio
+async def test_close_task_fail(client):
+    service = MagicMock()
+    service.close_task = AsyncMock(return_value=False)
+    with patch("main.todoist_service_for_token", return_value=service):
+        response = await client.post("/api/tasks/123/close", headers=await auth_headers(client))
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Failed to close task"
+
+@pytest.mark.asyncio
+async def test_close_task_requires_auth(client):
+    response = await client.post("/api/tasks/123/close")
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_delete_task(client):
+    service = MagicMock()
+    service.delete_task = AsyncMock(return_value=True)
+    with patch("main.todoist_service_for_token", return_value=service):
+        response = await client.delete("/api/tasks/123", headers=await auth_headers(client))
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "deleted"}
+
+@pytest.mark.asyncio
+async def test_delete_task_fail(client):
+    service = MagicMock()
+    service.delete_task = AsyncMock(return_value=False)
+    with patch("main.todoist_service_for_token", return_value=service):
+        response = await client.delete("/api/tasks/123", headers=await auth_headers(client))
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Failed to delete task"
+
+@pytest.mark.asyncio
+async def test_delete_task_requires_auth(client):
+    response = await client.delete("/api/tasks/123")
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
 async def test_profile_endpoint_import_error(client):
     import os
     with patch.dict(os.environ, {"PROFILE": "1"}, clear=False):

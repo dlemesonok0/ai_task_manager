@@ -80,6 +80,45 @@ async def test_create_task_error(todoist_service):
     assert task is None
 
 @pytest.mark.asyncio
+async def test_update_task_success(todoist_service):
+    mock_task = MagicMock()
+    todoist_service.api.update_task = AsyncMock(return_value=mock_task)
+    task = await todoist_service.update_task("123", content="Updated", priority=3)
+    assert task == mock_task
+    todoist_service.api.update_task.assert_called_with(task_id="123", content="Updated", priority=3)
+
+@pytest.mark.asyncio
+async def test_update_task_with_due(todoist_service):
+    mock_task = MagicMock()
+    todoist_service.api.update_task = AsyncMock(return_value=mock_task)
+    task = await todoist_service.update_task("123", due_string="next monday")
+    assert task == mock_task
+    todoist_service.api.update_task.assert_called_with(task_id="123", due_string="next monday")
+
+@pytest.mark.asyncio
+async def test_update_task_no_data(todoist_service):
+    task = await todoist_service.update_task("123")
+    assert task is None
+
+@pytest.mark.asyncio
+async def test_update_task_error(todoist_service):
+    todoist_service.api.update_task = AsyncMock(side_effect=Exception("Error"))
+    task = await todoist_service.update_task("123", content="Updated")
+    assert task is None
+
+@pytest.mark.asyncio
+async def test_delete_task_success(todoist_service):
+    todoist_service.api.delete_task = AsyncMock(return_value=True)
+    result = await todoist_service.delete_task("123")
+    assert result is True
+
+@pytest.mark.asyncio
+async def test_delete_task_error(todoist_service):
+    todoist_service.api.delete_task = AsyncMock(side_effect=Exception("Error"))
+    result = await todoist_service.delete_task("123")
+    assert result is False
+
+@pytest.mark.asyncio
 async def test_close_task_success(todoist_service):
     todoist_service.api.close_task = AsyncMock(return_value=True)
     result = await todoist_service.close_task("123")
@@ -118,4 +157,6 @@ async def test_methods_no_api():
     assert await service.get_active_tasks() == []
     assert await service.create_task("test") is None
     assert await service.create_inbox_task("test") is None
+    assert await service.update_task("1", content="x") is None
+    assert await service.delete_task("1") is False
     assert await service.close_task("1") is False

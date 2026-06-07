@@ -33,6 +33,11 @@ class TaskCreate(BaseModel):
     priority: Optional[int] = 1
     due_string: Optional[str] = "today"
 
+class TaskUpdate(BaseModel):
+    content: Optional[str] = None
+    priority: Optional[int] = None
+    due_string: Optional[str] = None
+
 class TaskResponse(BaseModel):
     id: str
     content: str
@@ -339,6 +344,54 @@ def update_event(event_id: str, event_data: CalendarEventUpdate, auth_payload: d
     db_service.upsert_event(user_id, event)
     logger.info("Updated calendar event", extra=bind_extra(user_id=user_id, event_id=event_id, calendar_id=event_data.calendar_id))
     return event
+
+@app.put("/api/tasks/{task_id}", response_model=TaskResponse, tags=["Tasks"], dependencies=[Depends(require_auth)])
+async def update_task(task_id: str, task_data: TaskUpdate, auth_payload: dict = Depends(require_auth)):
+    """Update an existing task in Todoist."""
+    user_id = current_user_id(auth_payload)
+    integrations = user_integrations(user_id)
+    service = todoist_service_for_token(integrations.get("todoist_api_token"))
+    task = await service.update_task(
+        task_id=task_id,
+        content=task_data.content,
+        priority=task_data.priority,
+        due_string=task_data.due_string,
+    )
+    if not task:
+        raise HTTPException(status_code=500, detail="Failed to update task")
+    cached_task = _task_to_response(task)
+    db_service.upsert_task(user_id, cached_task)
+    logger.info("Updated Todoist task", extra=bind_extra(user_id=user_id, task_id=task.id))
+    return cached_task
+
+
+@app.post("/api/tasks/{task_id}/close", tags=["Tasks"], dependencies=[Depends(require_auth)])
+async def close_task(task_id: str, auth_payload: dict = Depends(require_auth)):
+    """Close (complete) a task in Todoist."""
+    user_id = current_user_id(auth_payload)
+    integrations = user_integrations(user_id)
+    service = todoist_service_for_token(integrations.get("todoist_api_token"))
+    success = await service.close_task(task_id=task_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to close task")
+    db_service.delete_task(user_id, task_id)
+    logger.info("Closed Todoist task", extra=bind_extra(user_id=user_id, task_id=task_id))
+    return {"status": "completed"}
+
+
+@app.delete("/api/tasks/{task_id}", tags=["Tasks"], dependencies=[Depends(require_auth)])
+async def delete_task(task_id: str, auth_payload: dict = Depends(require_auth)):
+    """Delete a task from Todoist."""
+    user_id = current_user_id(auth_payload)
+    integrations = user_integrations(user_id)
+    service = todoist_service_for_token(integrations.get("todoist_api_token"))
+    success = await service.delete_task(task_id=task_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete task")
+    db_service.delete_task(user_id, task_id)
+    logger.info("Deleted Todoist task", extra=bind_extra(user_id=user_id, task_id=task_id))
+    return {"status": "deleted"}
+
 
 @app.get("/", tags=["Health"])
 def read_root():
