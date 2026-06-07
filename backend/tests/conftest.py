@@ -117,6 +117,9 @@ class FakeDatabase:
         tasks.append(task)
         self.tasks[user_id] = tasks
 
+    def delete_task(self, user_id, task_id):
+        self.tasks[user_id] = [t for t in self.tasks.get(user_id, []) if t["id"] != task_id]
+
     def replace_events(self, user_id, events):
         self.events[user_id] = list(events)
         self.sync_state.setdefault(user_id, {})["events"] = {"item_count": len(events)}
@@ -151,6 +154,7 @@ async def fake_database(monkeypatch):
         "replace_tasks",
         "get_tasks",
         "upsert_task",
+        "delete_task",
         "replace_events",
         "get_events",
         "upsert_event",

@@ -11,3 +11,4 @@ logs/
 backend/logs/
 data/
 backend/data/
+/opencode.json
