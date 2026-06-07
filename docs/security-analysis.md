@@ -6,10 +6,11 @@
 
 Инструмент: Semgrep.
 
-Конфигурация: `.semgrep.yml`.
+Конфигурация: стандартные rulesets `p/security-audit`, `p/python`, `p/javascript` и проектные правила `.semgrep.yml`.
 
 Покрытие:
 
+- Стандартные Semgrep checks для Python и JavaScript/TypeScript.
 - FastAPI CORS misconfiguration.
 - Hardcoded/default auth secret.
 - Debug/profile endpoint без env guard.

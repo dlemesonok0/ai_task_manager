@@ -5,11 +5,14 @@
 Команда:
 
 ```powershell
-semgrep scan --config .semgrep.yml backend frontend
+semgrep scan --config p/security-audit --config p/python --config p/javascript --config .semgrep.yml backend frontend
 ```
 
 Настроенные правила:
 
+- `p/security-audit`: стандартный Semgrep ruleset для распространенных security issues.
+- `p/python`: стандартные Python rules.
+- `p/javascript`: стандартные JavaScript/TypeScript rules.
 - `python.fastapi.wildcard-cors-with-credentials`: запрещает `allow_origins=["*"]` вместе с `allow_credentials=True`.
 - `python.auth.hardcoded-auth-secret`: ищет hardcoded/default authentication secrets.
 - `python.debug.profile-endpoint-without-env-guard`: проверяет guard для debug profile endpoint.
