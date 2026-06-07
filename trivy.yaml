@@ -4,8 +4,8 @@ scan:
     - secret
     - misconfig
 
-vulnerability:
-  type:
+pkg:
+  types:
     - os
     - library
 
