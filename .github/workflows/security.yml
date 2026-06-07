@@ -127,6 +127,7 @@ jobs:
         run: |
           mkdir -p reports/security
           cp zap-baseline.conf reports/security/zap-baseline.conf
+          chmod -R 777 reports/security
           docker run --rm --network ai_task_manager_default -v "${PWD}/reports/security:/zap/wrk/:rw" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://frontend -c zap-baseline.conf -r zap-report.html -J zap-report.json
         env:
           COMPOSE_PROJECT_NAME: ai_task_manager
