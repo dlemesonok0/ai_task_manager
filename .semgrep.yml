@@ -1,0 +1,81 @@
+rules:
+  - id: python.fastapi.wildcard-cors-with-credentials
+    message: CORS must not allow all origins when credentials are enabled.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"
+    patterns:
+      - pattern: |
+          $APP.add_middleware(
+            CORSMiddleware,
+            ...,
+            allow_origins=["*"],
+            ...,
+            allow_credentials=True,
+            ...,
+          )
+
+  - id: python.auth.hardcoded-auth-secret
+    message: Authentication secrets must come from environment or a secret manager.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-798: Use of Hard-coded Credentials"
+    patterns:
+      - pattern-either:
+          - pattern: os.getenv("AUTH_SECRET_KEY") or "..."
+          - pattern: os.getenv("AUTH_SECRET_KEY", "...")
+          - pattern-regex: (?i)(secret|token|password|key)\s*=\s*["'][^"']{8,}["']
+
+  - id: python.debug.profile-endpoint-without-env-guard
+    message: Debug/profile endpoints must be protected by an environment guard.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-489: Active Debug Code"
+    patterns:
+      - pattern: |
+          @$APP.get("/profile", ...)
+          def $FUNC(...):
+            ...
+      - pattern-not: |
+          @$APP.get("/profile", ...)
+          def $FUNC(...):
+            ...
+            if os.environ.get("PROFILE") != "1":
+              ...
+
+  - id: python.subprocess.shell-true
+    message: subprocess with shell=True can enable command injection.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-78: OS Command Injection"
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: subprocess.call(..., shell=True, ...)
+
+  - id: typescript.react.dangerous-html
+    message: Avoid dangerouslySetInnerHTML unless content is sanitized.
+    severity: WARNING
+    languages:
+      - typescript
+    metadata:
+      category: security
+      cwe:
+        - "CWE-79: Cross-site Scripting"
+    pattern: dangerouslySetInnerHTML={...}

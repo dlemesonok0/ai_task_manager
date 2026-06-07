@@ -1,0 +1,12 @@
+﻿# npm audit report
+
+brace-expansion  5.0.2 - 5.0.5
+Severity: moderate
+brace-expansion: Large numeric range defeats documented `max` DoS protection - https://github.com/advisories/GHSA-jxxr-4gwj-5jf2
+fix available via `npm audit fix`
+node_modules/brace-expansion
+
+1 moderate severity vulnerability
+
+To address all issues, run:
+  npm audit fix

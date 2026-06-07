@@ -1,0 +1,31 @@
+scan:
+  scanners:
+    - vuln
+    - secret
+    - misconfig
+
+vulnerability:
+  type:
+    - os
+    - library
+
+severity:
+  - HIGH
+  - CRITICAL
+
+ignore-unfixed: true
+
+format: table
+
+skip-dirs:
+  - .git
+  - backend/.venv
+  - frontend/node_modules
+  - frontend/coverage
+  - frontend/dist
+
+misconfiguration:
+  scanners:
+    - dockerfile
+    - yaml
+  include-non-failures: false

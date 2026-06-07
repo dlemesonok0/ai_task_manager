@@ -117,11 +117,161 @@ jobs:
           path: frontend/coverage
           if-no-files-found: error
 
+  sast-semgrep:
+    name: SAST / Semgrep
+    needs:
+      - yaml-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: .semgrep.yml
+          generateSarif: "1"
+
+      - name: Upload Semgrep SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: warn
+
+      - name: Add SAST summary
+        if: always()
+        run: |
+          {
+            echo "## SAST / Semgrep"
+            echo "Config: \`.semgrep.yml\`"
+            echo "Report artifact: \`sast-semgrep-sarif\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sca-trivy:
+    name: SCA / Trivy
+    needs:
+      - yaml-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy table report
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          trivy-config: trivy.yaml
+          format: table
+          output: trivy-report.txt
+          exit-code: "0"
+
+      - name: Run Trivy JSON gate
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          trivy-config: trivy.yaml
+          format: json
+          output: trivy-report.json
+          exit-code: "1"
+
+      - name: Upload Trivy reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-trivy-reports
+          path: |
+            trivy-report.txt
+            trivy-report.json
+          if-no-files-found: warn
+
+      - name: Add SCA summary
+        if: always()
+        run: |
+          {
+            echo "## SCA / Trivy"
+            echo "Config: \`trivy.yaml\`"
+            echo "Report artifact: \`sca-trivy-reports\`"
+            echo '```'
+            tail -n 80 trivy-report.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  dast-zap:
+    name: DAST / OWASP ZAP
+    needs:
+      - backend-tests
+      - frontend-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write CI backend environment
+        run: |
+          cat > backend/.env <<ENVEOF
+          TELEGRAM_BOT_TOKEN=
+          GEMINI_API_KEY=
+          AUTH_SECRET_KEY=${AUTH_SECRET_KEY}
+          AUTH_TOKEN_TTL_SECONDS=86400
+          CORS_ALLOW_ORIGINS=http://localhost,http://frontend
+          LOG_DIR=logs
+          LOG_FILE_NAME=app.log
+          LOG_LEVEL=INFO
+          LOG_MAX_BYTES=5242880
+          LOG_BACKUP_COUNT=5
+          ENVEOF
+        env:
+          AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY || 'ci-auth-secret-key-with-at-least-32chars' }}
+
+      - name: Build and start application
+        run: |
+          docker compose up -d --build db api frontend
+          sleep 20
+          docker compose ps
+        env:
+          COMPOSE_PROJECT_NAME: ai_task_manager
+
+      - name: Run ZAP baseline
+        run: |
+          mkdir -p reports/security
+          docker run --rm --network ai_task_manager_default -v "${PWD}/reports/security:/zap/wrk/:rw" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://frontend -c zap-baseline.conf -r zap-report.html -J zap-report.json
+        env:
+          COMPOSE_PROJECT_NAME: ai_task_manager
+
+      - name: Upload ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-zap-reports
+          path: |
+            reports/security/zap-report.html
+            reports/security/zap-report.json
+          if-no-files-found: warn
+
+      - name: Add DAST summary
+        if: always()
+        run: |
+          {
+            echo "## DAST / OWASP ZAP"
+            echo "Config: \`zap-baseline.conf\`"
+            echo "Report artifact: \`dast-zap-reports\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop application
+        if: always()
+        run: docker compose down -v
+        env:
+          COMPOSE_PROJECT_NAME: ai_task_manager
+
   deploy:
     name: Deploy
     needs:
       - backend-tests
       - frontend-tests
+      - sast-semgrep
+      - sca-trivy
+      - dast-zap
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master')
     steps:
